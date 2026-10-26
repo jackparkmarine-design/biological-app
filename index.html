@@ -1,0 +1,831 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>Lab Logger</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Lab Logger">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#0a6a85">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}</style>
+<style>
+/* Lab Logger: bench data entry for lab-processed fish. Same look and storage model as Catch Logger,
+   but light (lab) mode by default. Layout: species | measurement tiles + keypad | biology + Save, recent fish below. */
+:root{
+  --bg:#e8edf0; --surface:#f8fafb; --raised:#ffffff; --ink:#0f1f29; --muted:#566771; --line:#c9d4da;
+  --accent:#0a6a85; --on-accent:#ffffff; --accent-soft:#d5e8ee;
+  --go:#1c7c45; --on-go:#ffffff; --go-s:#dcf0e3; --warn:#9c5300; --warn-soft:#fbe9d1; --danger:#b3261e; --danger-soft:#f8dedb;
+  --amb:#a85f00; --amb-s:#fbe9d1; --male:#2f6db5; --fem:#b0407a; --on-fam:#ffffff; --gen:#7a5a9a; --gen-s:#ece5f3;
+  --f-display:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;
+  --f-body:"Barlow",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
+  --r:10px;
+}
+:root[data-theme="dark"]{
+  --bg:#0b1216; --surface:#121e26; --raised:#17272f; --ink:#e2ebef; --muted:#8fa1ab; --line:#27404b;
+  --accent:#4cb2d0; --on-accent:#05202a; --accent-soft:#15384a;
+  --go:#3ab36a; --on-go:#04200e; --go-s:#123220; --warn:#f0a446; --warn-soft:#3a2810; --danger:#f0776d; --danger-soft:#3b1a17;
+  --amb:#f0a446; --amb-s:#3a2810; --male:#6aa0e0; --fem:#e07ab0; --on-fam:#0b1216; --gen:#a98bc9; --gen-s:#2a2236;
+  color-scheme:dark}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.35;-webkit-tap-highlight-color:transparent}
+*{box-sizing:border-box}
+button,input,select,textarea{font:inherit;color:inherit}
+[hidden]{display:none!important}
+.app{height:100%;display:grid;grid-template-rows:auto 1fr;min-height:0}
+main{overflow:auto;padding-inline:14px;padding-block:0 16px;min-height:0}
+
+.top{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;padding:8px 14px;background:var(--surface);border-bottom:1px solid var(--line)}
+.brand{font-family:var(--f-display);font-weight:700;font-size:20px;letter-spacing:.02em;text-transform:uppercase;color:var(--accent)}
+.stn{display:flex;flex-direction:column;min-width:0;max-width:340px}
+.stn b{font-family:var(--f-display);font-size:18px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.stn span{font-size:12.5px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pills{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.pill{font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;padding:4px 8px;border-radius:999px;border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+.pill.ok{border-color:var(--go);color:var(--go)}
+.pill.bad{background:var(--danger-soft);border-color:var(--danger);color:var(--danger)}
+.uibtn{font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;padding:4px 10px;min-height:30px;border-radius:999px;border:1px solid var(--line);background:var(--raised);color:var(--ink);cursor:pointer;white-space:nowrap}
+.bk.ok{border-color:var(--go);color:var(--go)}.bk.amb{border-color:var(--amb);color:var(--amb);background:var(--amb-s)}.bk.red{border-color:var(--danger);color:var(--danger);background:var(--danger-soft)}
+.nav{display:flex;gap:6px;margin-left:auto;flex-wrap:wrap}
+.nav button{min-height:44px;padding:0 14px;border-radius:8px;border:1px solid var(--line);background:var(--raised);font-weight:600;cursor:pointer}
+.nav button[aria-current="page"]{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}
+
+.lbl{font-family:var(--f-display);font-weight:600;font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.muted{color:var(--muted)} .small{font-size:12.5px}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:12px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.btn{min-height:52px;border:1px solid var(--line);background:var(--raised);border-radius:var(--r);font-weight:600;font-size:16px;cursor:pointer;touch-action:manipulation;user-select:none;-webkit-user-select:none;padding:4px 8px}
+.btn:active{transform:translateY(1px)}
+.btn[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.btn:disabled{opacity:.35;cursor:default}
+.btn:focus-visible,.nav button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,.uibtn:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.btn.danger{border-color:var(--danger);color:var(--danger)}
+.btn.danger.armed,.btn.danger.solid{background:var(--danger);color:var(--on-fam)}
+.btn.primary{background:var(--go);border-color:var(--go);color:var(--on-go)}
+.mini{min-height:40px;padding:0 12px;font-size:14px}
+
+/* entry */
+.entry{display:grid;grid-template-columns:minmax(250px,.9fr) minmax(300px,1fr) minmax(320px,1.15fr);gap:12px;padding-block:12px}
+.recent{grid-column:1/-1}
+@media (max-width:1000px){.entry{grid-template-columns:1fr 1fr}.col-sp{grid-column:1/-1}}
+@media (max-width:640px){.entry{grid-template-columns:1fr}}
+.codebox{border:1px solid var(--accent);background:var(--accent-soft);border-radius:var(--r);padding:8px 12px;display:flex;flex-direction:column;gap:2px}
+.codebox b{font-family:var(--f-mono);font-size:22px;letter-spacing:.02em;word-break:break-all}
+.codebox.edit{border-color:var(--amb);background:var(--amb-s)}
+.codebox.miss{border-color:var(--warn);background:var(--warn-soft);color:var(--warn)}
+.spgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+@media (max-width:1000px){.spgrid{grid-template-columns:repeat(4,minmax(0,1fr))}}
+.sp{position:relative;display:flex;flex-direction:column;align-items:flex-start;justify-content:center;text-align:left;padding:6px 30px 6px 10px;min-height:56px;line-height:1.15}
+.sp .n{font-size:15px}
+.sp .s{font-size:11.5px;font-style:italic;font-weight:400;opacity:.75}
+.sp .a{font-family:var(--f-mono);font-size:11px;font-weight:700;opacity:.8}
+.cnt{position:absolute;top:6px;right:5px;font-family:var(--f-mono);font-size:12px;font-weight:700;min-width:22px;height:20px;padding:0 5px;border-radius:999px;background:var(--raised);color:var(--ink);border:1px solid var(--line);display:flex;align-items:center;justify-content:center}
+.search{min-height:48px;border:1px solid var(--line);border-radius:8px;background:var(--raised);padding:0 12px;width:100%}
+.splist{display:flex;flex-direction:column;gap:6px;max-height:420px;overflow:auto}
+.splist .sp{min-height:50px}
+
+.tiles{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.tile{display:flex;flex-direction:column;align-items:stretch;text-align:left;min-height:84px;padding:6px 10px;border:1px solid var(--line);background:var(--raised);border-radius:var(--r);cursor:pointer;touch-action:manipulation;user-select:none;-webkit-user-select:none}
+.tile .tl{font-family:var(--f-display);font-weight:600;font-size:14px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);display:flex;justify-content:space-between}
+.tile .tv{font-family:var(--f-mono);font-weight:700;font-size:36px;line-height:1.1;text-align:right;font-variant-numeric:tabular-nums}
+.tile .tv.empty{color:var(--line)}
+.tile.on{border-color:var(--accent);box-shadow:inset 0 0 0 3px var(--accent)}
+.tile.has:not(.on){border-color:var(--go)}
+.tile:disabled{opacity:.35}
+.tiles.small .tile{min-height:68px}.tiles.small .tv{font-size:26px}
+.keypad{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+.keypad .btn{min-height:62px;font-family:var(--f-mono);font-size:26px}
+.keypad .fn{font-family:var(--f-body);font-size:16px}
+.keypad .next{grid-column:span 2;background:var(--accent);border-color:var(--accent);color:var(--on-accent);font-family:var(--f-body);font-size:18px}
+
+.group{display:flex;flex-direction:column;gap:6px}
+.seg{display:grid;gap:6px}
+.seg.c2{grid-template-columns:repeat(2,minmax(0,1fr))}.seg.c3{grid-template-columns:repeat(3,minmax(0,1fr))}.seg.c4{grid-template-columns:repeat(4,minmax(0,1fr))}
+.seg.c5{grid-template-columns:repeat(5,minmax(0,1fr))}.seg.c6{grid-template-columns:repeat(6,minmax(0,1fr))}.seg.c7{grid-template-columns:repeat(7,minmax(0,1fr))}
+.seg .btn{min-height:54px}
+.seg[data-f="sex"] .btn{font-size:15px;padding:4px 2px}
+.seg.stg .btn{font-family:var(--f-mono);font-size:22px;padding:0}
+.chip{display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.05}
+.chip small{font-size:11px;font-weight:500;opacity:.8}
+.seg[data-f="sex"] [data-v="M"][aria-pressed="true"]{background:var(--male);border-color:var(--male);color:var(--on-fam)}
+.seg[data-f="sex"] [data-v="F"][aria-pressed="true"]{background:var(--fem);border-color:var(--fem);color:var(--on-fam)}
+.tog[aria-pressed="true"]{background:var(--go);border-color:var(--go);color:var(--on-go)}
+.tog{display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.1}
+.tog small{font-size:11.5px;font-weight:500;opacity:.85}
+.genbox{border:1px solid var(--gen);background:var(--gen-s);border-radius:var(--r);padding:10px;display:flex;flex-direction:column;gap:8px}
+.genbox .seg .btn{min-height:48px;font-size:15px}
+.genbox .seg .btn[aria-pressed="true"]{background:var(--gen);border-color:var(--gen);color:var(--on-fam)}
+.txt{min-height:46px;border:1px solid var(--line);border-radius:8px;background:var(--raised);padding:0 12px;width:100%}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.row3{display:grid;grid-template-columns:1fr auto;gap:6px}
+.warn{background:var(--warn-soft);color:var(--warn);border:1px solid var(--warn);border-radius:8px;padding:8px 10px;font-weight:600;font-size:14px}
+.warn ul{margin:4px 0 0;padding-left:18px;font-weight:500}
+.save{min-height:76px;font-size:24px;font-family:var(--f-display);letter-spacing:.05em;text-transform:uppercase;background:var(--go);border-color:var(--go);color:var(--on-go)}
+.save.confirm{background:var(--warn);border-color:var(--warn);color:var(--on-fam)}
+.save.edit{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.save small{display:block;font-family:var(--f-mono);font-size:14px;letter-spacing:0;text-transform:none;font-weight:500;opacity:.9}
+.lastfish{border:1px solid var(--go);background:var(--go-s);color:var(--go);border-radius:10px;padding:8px 12px;font-weight:600;font-size:14px}
+.lastfish b{font-family:var(--f-mono)}
+.blocked{display:flex;flex-direction:column;gap:12px;align-items:flex-start;padding:24px 0;max-width:640px}
+
+/* tables */
+.tblwrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums;font-size:14px}
+th{font-family:var(--f-display);font-weight:600;letter-spacing:.06em;text-transform:uppercase;font-size:12.5px;color:var(--muted);text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:7px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+tbody tr[data-id]{cursor:pointer}
+tbody tr[data-id]:hover td{background:var(--accent-soft)}
+tr.sel td{background:var(--amb-s)}
+td.mono{font-family:var(--f-mono);font-size:13px}
+td.num{text-align:right}
+.tag{font-size:11.5px;font-weight:700;padding:2px 6px;border-radius:5px;border:1px solid var(--line);margin-right:3px}
+.tag.g{border-color:var(--gen);color:var(--gen)}.tag.o{border-color:var(--accent);color:var(--accent)}.tag.h{border-color:var(--amb);color:var(--amb)}
+.empty td{color:var(--muted);font-style:italic}
+.delcell{display:flex;gap:6px;align-items:center;justify-content:flex-end}
+.confirmrow td{background:var(--danger-soft);white-space:normal}
+.confirmbar{display:flex;gap:12px;align-items:center;justify-content:flex-end;flex-wrap:wrap}
+.delq{font-weight:600;color:var(--danger);font-size:14px}
+.stat{font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:3px 8px;border-radius:999px;border:1px solid var(--line);color:var(--muted)}
+.stat.prog{border-color:var(--warn);color:var(--warn)}.stat.ok{border-color:var(--go);color:var(--go)}
+
+/* other pages */
+.page{padding-block:16px;display:flex;flex-direction:column;gap:14px;max-width:1150px}
+.page h2{font-family:var(--f-display);font-weight:700;font-size:26px;margin:0}
+.form{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px 14px}
+.field{display:flex;flex-direction:column;gap:5px;min-width:0}
+.field>label,.field>.flab{font-size:13px;font-weight:600;color:var(--muted)}
+.field input,.field select,.field textarea{min-height:48px;border:1px solid var(--line);border-radius:8px;background:var(--raised);padding:6px 10px;width:100%}
+.field input:disabled{opacity:.6}
+.field.wide{grid-column:1/-1}.field.half{grid-column:span 2}
+@media (max-width:700px){.field.half{grid-column:1/-1}}
+.field textarea{min-height:70px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chips .btn{min-height:46px;padding:0 14px;font-size:15px}
+.chips .txt{width:200px;min-height:46px}
+.inl{display:flex;gap:6px;align-items:center}
+.inl input{flex:1;min-width:0}
+.actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.actions .btn{padding:0 18px}
+.tabs{display:flex;gap:6px;flex-wrap:wrap}
+.tabs .btn{min-height:44px;padding:0 14px}
+textarea.csv{width:100%;min-height:300px;font-family:var(--f-mono);font-size:12px;border:1px solid var(--line);border-radius:8px;background:var(--raised);padding:10px;white-space:pre;overflow:auto}
+.tally{display:flex;flex-wrap:wrap;gap:6px}
+.tally span{border:1px solid var(--line);border-radius:8px;padding:5px 9px;background:var(--raised);font-size:13.5px}
+.tally b{font-family:var(--f-mono)}
+.note{font-size:13.5px;color:var(--muted);max-width:75ch;margin:0}
+.bcards{display:flex;flex-direction:column;gap:8px}
+.bcard{display:grid;grid-template-columns:1fr auto;gap:8px 14px;align-items:center;padding:12px 14px;border:1px solid var(--line);border-radius:var(--r);background:var(--raised)}
+.bcard.act{border-color:var(--accent);box-shadow:inset 0 0 0 2px var(--accent)}
+.bcard h3{margin:0;font-family:var(--f-display);font-size:20px;font-weight:600}
+.bcard .code{font-family:var(--f-mono);font-size:14px;font-weight:700;color:var(--accent)}
+.bcard .acts{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.bcard .acts .btn{min-height:48px;padding:0 16px}
+.dupe{background:var(--danger-soft);border:1px solid var(--danger);color:var(--danger);border-radius:10px;padding:10px 14px;font-weight:600}
+.sptab input{min-height:40px;border:1px solid var(--line);border-radius:6px;background:var(--raised);padding:0 8px;font-family:var(--f-mono)}
+.sptab input.ac{width:72px;text-transform:uppercase}.sptab input.cd{width:96px}
+.sptab select{min-height:40px;border:1px solid var(--line);border-radius:6px;background:var(--raised)}
+.sptab td{padding:4px 8px}
+.sptab .btn{min-height:40px;min-width:48px;font-size:14px}
+.staffrow{display:grid;grid-template-columns:1fr 110px auto;gap:6px;align-items:center}
+.modal{position:fixed;inset:0;z-index:20;background:rgba(5,12,16,.6);display:flex;align-items:center;justify-content:center;padding:16px}
+.mbox{background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:14px;padding:16px;max-width:620px;width:100%;max-height:92%;overflow:auto;display:flex;flex-direction:column;gap:12px}
+.mbox h3{margin:0;font-family:var(--f-display);font-size:22px}
+.preview{font-family:var(--f-mono);font-size:13px;border:1px solid var(--line);border-radius:8px;background:var(--raised);padding:8px 10px;max-height:200px;overflow:auto;white-space:pre}
+.savefail{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-block:10px 0;padding:10px 14px;border-radius:10px;background:var(--danger);color:var(--on-fam);font-size:14.5px}
+.savefail .btn{min-height:44px;background:var(--raised);color:var(--ink);border-color:var(--raised)}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:999px;font-weight:600;opacity:0;transition:opacity .15s;pointer-events:none;z-index:40;max-width:calc(100% - 32px)}
+.toast.on{opacity:1}
+.flash{animation:flash .4s ease-out}
+@keyframes flash{from{background:var(--go);color:var(--on-go)}to{}}
+@media (prefers-reduced-motion:reduce){.flash{animation:none}.toast{transition:none}}
+</style>
+
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <div class="brand">Lab Logger</div>
+    <div class="stn"><b id="bTitle">No batch open</b><span id="bSub">—</span></div>
+    <div class="pills"><span class="pill" id="savePill">Saved</span><button class="uibtn bk" id="bkPill">Backup</button><button class="uibtn" id="themeBtn"></button></div>
+    <nav class="nav" id="nav">
+      <button data-v="batches">Batches</button>
+      <button data-v="header">Header</button>
+      <button data-v="entry">Fish entry</button>
+      <button data-v="sheet">Batch sheet</button>
+      <button data-v="export">Export</button>
+      <button data-v="setup">Setup</button>
+    </nav>
+  </header>
+  <main id="main">
+    <div class="savefail" id="saveFail" role="alert" hidden><span><b>The last change could not be saved on this iPad.</b> Make a backup now, then check free space in iPad Settings.</span><button class="btn" id="bkNow2">Back up now</button></div>
+    <div id="view"></div>
+  </main>
+</div>
+<div class="modal" id="modal" hidden></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(function(){
+'use strict';
+const APP_VERSION='v1';
+const LS_KEY='labLogger.v1', DB_NAME='labLogger';
+const $=s=>document.querySelector(s);
+const esc=v=>String(v==null?'':v).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+const z=n=>String(n).padStart(2,'0');
+const todayISO=()=>{const d=new Date();return `${d.getFullYear()}-${z(d.getMonth()+1)}-${z(d.getDate())}`};
+const localDT=d=>`${d.getFullYear()}-${z(d.getMonth()+1)}-${z(d.getDate())}T${z(d.getHours())}:${z(d.getMinutes())}`;
+const hm=iso=>{if(!iso)return '';const d=new Date(iso);return isNaN(d)?'':z(d.getHours())+':'+z(d.getMinutes())};
+const dmy=iso=>iso?`${iso.slice(8,10)}/${iso.slice(5,7)}/${iso.slice(0,4)}`:'';
+const yymmdd=iso=>iso&&/^\d{4}-\d\d-\d\d$/.test(iso)?iso.slice(2,4)+iso.slice(5,7)+iso.slice(8,10):'';
+/* Financial year as Access shows it, e.g. 26/27 (July to June). */
+const fyOf=iso=>{const d=iso?new Date(iso+'T12:00:00'):new Date();let y=d.getFullYear()%100;if(d.getMonth()<6)y=(y+99)%100;return z(y)+'/'+z((y+1)%100)};
+
+/* ---------- reference lists ----------
+   Species: every fish and shark species in the 2024-25 State of the Fisheries catch tables (Appendix 2).
+   acr = placeholder acronym used in sample codes; code = Access species code (CAAB without the leading 37).
+   Only pink snapper and dhufish codes are confirmed so far; the rest are blank until the species table arrives.
+   fl = offer fork length (placeholder from tail shape); stages = number of macroscopic stages (placeholder 7).
+   All of these can be edited in Setup. */
+const BASE_SP=[{"acr":"AL","common":"Albacore","sci":"Thunnus alalunga","code":"","fl":true,"stages":7,"fav":false},{"acr":"AM","common":"Amberjack","sci":"Seriola dumerili","code":"","fl":true,"stages":7,"fav":false},{"acr":"AHA","common":"Australian Halibut","sci":"Psettodes erumei","code":"","fl":false,"stages":7,"fav":false},{"acr":"AH","common":"Australian Herring","sci":"Arripis georgianus","code":"","fl":true,"stages":7,"fav":true},{"acr":"AS","common":"Australian Sardine","sci":"Sardinops sagax","code":"","fl":true,"stages":7,"fav":false},{"acr":"AT","common":"Australian Threadfin","sci":"Polydactylus multiradiatus","code":"","fl":true,"stages":7,"fav":false},{"acr":"BG","common":"Baldchin Groper","sci":"Choerodon rubescens","code":"","fl":false,"stages":7,"fav":true},{"acr":"BA","common":"Banded Grouper","sci":"Epinephelus amblycephalus","code":"","fl":false,"stages":7,"fav":false},{"acr":"BS","common":"Banded Sweep","sci":"Scorpis georgiana","code":"","fl":true,"stages":7,"fav":false},{"acr":"BCT","common":"Barcheek Coral Trout","sci":"Plectropomus maculatus","code":"","fl":false,"stages":7,"fav":false},{"acr":"BAR","common":"Barracouta","sci":"Thyrsites atun","code":"","fl":true,"stages":7,"fav":false},{"acr":"BBA","common":"Barramundi","sci":"Lates calcarifer","code":"","fl":true,"stages":7,"fav":false},{"acr":"BCO","common":"Barramundi Cod","sci":"Chromileptes altivelis","code":"","fl":false,"stages":7,"fav":false},{"acr":"BJ","common":"Barred Javelin","sci":"Pomadasys kaakan","code":"","fl":false,"stages":7,"fav":false},{"acr":"BGR","common":"Bass Groper","sci":"Polyprion americanus","code":"","fl":false,"stages":7,"fav":false},{"acr":"BJE","common":"Bearded Jewfish","sci":"Johnius amblycephalus","code":"","fl":false,"stages":7,"fav":false},{"acr":"BP","common":"Bigeye Ocean Perch","sci":"Helicolenus barathri","code":"","fl":false,"stages":7,"fav":false},{"acr":"BTU","common":"Bigeye Tuna","sci":"Thunnus obesus","code":"","fl":true,"stages":7,"fav":false},{"acr":"BGP","common":"Bighead Gurnard Perch","sci":"Neosebastes pandus","code":"","fl":false,"stages":7,"fav":false},{"acr":"BR","common":"Bight Redfish","sci":"Centroberyx gerrardi","code":"","fl":true,"stages":7,"fav":true},{"acr":"BRO","common":"Birdwire Rockcod","sci":"Epinephelus merra","code":"","fl":false,"stages":7,"fav":false},{"acr":"BB","common":"Black Bream","sci":"Acanthopagrus butcheri","code":"","fl":true,"stages":7,"fav":false},{"acr":"BL","common":"Black Jewfish","sci":"Protonibea diacanthus","code":"","fl":false,"stages":7,"fav":false},{"acr":"BMA","common":"Black Marlin","sci":"Makaira indica","code":"","fl":true,"stages":7,"fav":false},{"acr":"BPO","common":"Black Pomfret","sci":"Parastromateus niger","code":"","fl":true,"stages":7,"fav":false},{"acr":"BT","common":"Blackspot Tuskfish","sci":"Choerodon schoenleinii","code":"","fl":false,"stages":7,"fav":false},{"acr":"BLA","common":"Blackspotted Rockcod","sci":"Epinephelus malabaricus","code":"","fl":false,"stages":7,"fav":false},{"acr":"BRS","common":"Blacktip Reef Shark","sci":"Carcharhinus melanopterus","code":"","fl":false,"grp":"shark","stages":7,"fav":false},{"acr":"BO","common":"Blacktip Rockcod","sci":"Epinephelus fasciatus","code":"","fl":false,"stages":7,"fav":false},{"acr":"BJA","common":"Blotched Javelin","sci":"Pomadasys maculatus","code":"","fl":false,"stages":7,"fav":false},{"acr":"BTR","common":"Bludger Trevally","sci":"Carangoides gymnostethus","code":"","fl":true,"stages":7,"fav":false},{"acr":"BLU","common":"Blue Mackerel","sci":"Scomber australasicus","code":"","fl":true,"stages":7,"fav":false},{"acr":"BMR","common":"Blue Marlin","sci":"Makaira nigricans","code":"","fl":true,"stages":7,"fav":false},{"acr":"BM","common":"Blue Morwong","sci":"Nemadactylus valenciennesi","code":"","fl":true,"stages":7,"fav":true},{"acr":"BSP","common":"Blue Sprat","sci":"Spratelloides robustus","code":"","fl":true,"stages":7,"fav":false},{"acr":"BTH","common":"Blue Threadfin","sci":"Eleutheronema tetradactylum","code":"","fl":true,"stages":7,"fav":false},{"acr":"BU","common":"Blue Tuskfish","sci":"Choerodon cyanodus","code":"","fl":false,"stages":7,"fav":false},{"acr":"BW","common":"Blue Weed Whiting","sci":"Haletta semifasciata","code":"","fl":false,"stages":7,"fav":false},{"acr":"BET","common":"Blue-Eye Trevalla","sci":"Hyperoglyphe antarctica","code":"","fl":true,"stages":7,"fav":false},{"acr":"BLR","common":"Bluefin Trevally","sci":"Caranx melampygus","code":"","fl":true,"stages":7,"fav":false},{"acr":"BTO","common":"Bluespotted Coral Trout","sci":"Plectropomus laevis","code":"","fl":false,"stages":7,"fav":false},{"acr":"BE","common":"Bluespotted Emperor","sci":"Lethrinus punctulatus","code":"","fl":true,"stages":7,"fav":false},{"acr":"BGO","common":"Bluespotted Goatfish","sci":"Upeneichthys vlamingii","code":"","fl":true,"stages":7,"fav":false},{"acr":"BTE","common":"Bluespotted Trevally","sci":"Caranx bucculentus","code":"","fl":true,"stages":7,"fav":false},{"acr":"BTS","common":"Bluespotted Tuskfish","sci":"Choerodon cauteroma","code":"","fl":false,"stages":7,"fav":false},{"acr":"BLO","common":"Bluestriped Goatfish","sci":"Upeneichthys lineatus","code":"","fl":true,"stages":7,"fav":false},{"acr":"BMU","common":"Bluetail Mullet","sci":"Valamugil buchanani","code":"","fl":true,"stages":7,"fav":false},{"acr":"BSN","common":"Bowen's Ruby Snapper","sci":"Etelis boweni","code":"","fl":true,"stages":7,"fav":false},{"acr":"BRA","common":"Brassy Trevally","sci":"Caranx papuensis","code":"","fl":true,"stages":7,"fav":false},{"acr":"BC","common":"Breaksea Cod","sci":"Epinephelides armatus","code":"","fl":false,"stages":7,"fav":true},{"acr":"BWH","common":"Bronze Whaler","sci":"Carcharhinus brachyurus","code":"","fl":false,"grp":"shark","stages":7,"fav":false},{"acr":"BWR","common":"Brownspotted Wrasse","sci":"Notolabrus parilus","code":"","fl":false,"stages":7,"fav":false},{"acr":"BN","common":"Brownstripe Snapper","sci":"Lutjanus vitta","code":"","fl":true,"stages":7,"fav":false},{"acr":"BGU","common":"Butterfly Gurnard","sci":"Lepidotrigla vanessa","code":"","fl":false,"stages":7,"fav":false},{"acr":"CG","common":"Camouflage Grouper","sci":"Epinephelus polyphekadion","code":"","fl":false,"stages":7,"fav":false},{"acr":"CR","common":"Chinaman Rockcod","sci":"Epinephelus rivulatus","code":"","fl":false,"stages":7,"fav":false},{"acr":"CH","common":"Chinamanfish","sci":"Symphorus nematophorus","code":"","fl":true,"stages":7,"fav":false},{"acr":"CO","common":"Cobia","sci":"Rachycentron canadum","code":"","fl":true,"stages":7,"fav":false},{"acr":"CGR","common":"Comet Grouper","sci":"Epinephelus morrhua","code":"","fl":false,"stages":7,"fav":false},{"acr":"CT","common":"Common Coral Trout","sci":"Plectropomus leopardus","code":"","fl":false,"stages":7,"fav":false},{"acr":"CD","common":"Common Dart","sci":"Trachinotus botla","code":"","fl":true,"stages":7,"fav":false},{"acr":"CSA","common":"Common Sawshark","sci":"Pristiophorus cirratus","code":"","fl":false,"grp":"shark","stages":7,"fav":false},{"acr":"CRO","common":"Coral Rockcod","sci":"Cephalopholis miniata","code":"","fl":false,"stages":7,"fav":false},{"acr":"CS","common":"Crimson Snapper","sci":"Lutjanus erythropterus","code":"","fl":true,"stages":7,"fav":false},{"acr":"DS","common":"Darktail Snapper","sci":"Lutjanus lemniscatus","code":"","fl":true,"stages":7,"fav":false},{"acr":"DT","common":"Diamond Trevally","sci":"Alectis indica","code":"","fl":true,"stages":7,"fav":false},{"acr":"DTU","common":"Dogtooth Tuna","sci":"Gymnosarda unicolor","code":"","fl":true,"stages":7,"fav":false},{"acr":"DG","common":"Dotted Grouper","sci":"Epinephelus epistictus","code":"","fl":false,"stages":7,"fav":false},{"acr":"DE","common":"Drab Emperor","sci":"Lethrinus ravus","code":"","fl":true,"stages":7,"fav":false},{"acr":"DM","common":"Dusky Morwong","sci":"Dactylophora nigricans","code":"","fl":true,"stages":7,"fav":false},{"acr":"DW","common":"Dusky Whaler","sci":"Carcharhinus obscurus","code":"","fl":false,"grp":"shark","stages":7,"fav":false},{"acr":"DGR","common":"Duskytail Grouper","sci":"Epinephelus bleekeri","code":"","fl":false,"stages":7,"fav":false},{"acr":"EG","common":"Eightbar Grouper","sci":"Hyporthodus octofasciatus","code":"","fl":false,"stages":7,"fav":false},{"acr":"EC","common":"Estuary Cobbler","sci":"Cnidoglanis macrocephalus","code":"","fl":false,"stages":7,"fav":false},{"acr":"FF","common":"False Fusilier","sci":"Paracaesio xanthura","code":"","fl":true,"stages":7,"fav":false},{"acr":"FS","common":"Fiveline Snapper","sci":"Lutjanus quinquelineatus","code":"","fl":true,"stages":7,"fav":false},{"acr":"FSN","common":"Flame Snapper","sci":"Etelis coruscans","code":"","fl":true,"stages":7,"fav":false},{"acr":"FR","common":"Flowery Rockcod","sci":"Epinephelus fuscoguttatus","code":"","fl":false,"stages":7,"fav":false},{"acr":"FSW","common":"Footballer Sweep","sci":"Neatypus obliquus","code":"","fl":true,"stages":7,"fav":false},{"acr":"FO","common":"Foxfish","sci":"Bodianus frenchii","code":"","fl":false,"stages":7,"fav":false},{"acr":"FRO","common":"Frostback Rockcod","sci":"Epinephelus bilobatus","code":"","fl":false,"stages":7,"fav":false},{"acr":"FN","common":"Frypan Bream (A. notialis)","sci":"Argyrops notialis","code":"","fl":true,"stages":7,"fav":false},{"acr":"FBA","common":"Frypan Bream (A. spinifer)","sci":"Argyrops spinifer","code":"","fl":true,"stages":7,"fav":false},{"acr":"GE","common":"Gemfish","sci":"Rexea solandri","code":"","fl":true,"stages":7,"fav":false},{"acr":"GQ","common":"Giant Queenfish","sci":"Scomberoides commersonnianus","code":"","fl":true,"stages":7,"fav":false},{"acr":"GC","common":"Giant Sea Catfish","sci":"Netuma thalassina","code":"","fl":true,"stages":7,"fav":false},{"acr":"GT","common":"Giant Trevally","sci":"Caranx ignobilis","code":"","fl":true,"stages":7,"fav":false},{"acr":"GS","common":"Goldband Snapper","sci":"Pristipomoides multidens","code":"","fl":true,"stages":7,"fav":true},{"acr":"GSN","common":"Golden Snapper","sci":"Lutjanus johnii","code":"","fl":true,"stages":7,"fav":false},{"acr":"GTR","common":"Golden Trevally","sci":"Gnathanodon speciosus","code":"","fl":true,"stages":7,"fav":false},{"acr":"GW","common":"Goldenline Whiting","sci":"Sillago analis","code":"","fl":true,"stages":7,"fav":false},{"acr":"GR","common":"Goldspotted Rockcod","sci":"Epinephelus coioides","code":"","fl":false,"stages":7,"fav":false},{"acr":"GSW","common":"Goldspotted Sweetlips","sci":"Plectorhinchus flavomaculatus","code":"","fl":false,"stages":7,"fav":false},{"acr":"GEM","common":"Grass Emperor","sci":"Lethrinus laticaudis","code":"","fl":true,"stages":7,"fav":false},{"acr":"GB","common":"Great Barracuda","sci":"Sphyraena barracuda","code":"","fl":true,"stages":7,"fav":false},{"acr":"GH","common":"Great Hammerhead","sci":"Sphyrna mokarran","code":"","fl":false,"grp":"shark","stages":7,"fav":false},{"acr":"GJ","common":"Green Jobfish","sci":"Aprion virescens","code":"","fl":true,"stages":7,"fav":false},{"acr":"GM","common":"Grey Mackerel","sci":"Scomberomorus semifasciatus","code":"","fl":true,"stages":7,"fav":false},{"acr":"GRO","common":"Greybanded Rockcod","sci":"Hyporthodus griseofasciatus","code":"","fl":false,"stages":7,"fav":false},{"acr":"GSH","common":"Greynurse Shark","sci":"Carcharias taurus","code":"","fl":false,"grp":"shark","stages":7,"fav":false},{"acr":"GU","common":"Gummy Shark","sci":"Mustelus antarcticus","code":"","fl":false,"grp":"shark","stages":7,"fav":false},{"acr":"HA","common":"Hapuku","sci":"Polyprion oxygeneios","code":"","fl":false,"stages":7,"fav":false},{"acr":"HF","common":"Harlequin Fish","sci":"Othos dentex","code":"","fl":false,"stages":7,"fav":false},{"acr":"HH","common":"Hawaiian Giant Herring","sci":"Elops hawaiensis","code":"","fl":true,"stages":7,"fav":false},{"acr":"HL","common":"Horseshoe Leatherjacket","sci":"Meuschenia hippocrepis","code":"","fl":false,"stages":7,"fav":false},{"acr":"IS","common":"Indonesian Snapper","sci":"Lutjanus bitaeniatus","code":"","fl":true,"stages":7,"fav":false},{"acr":"JM","common":"Jackass Morwong","sci":"Nemadactylus macropterus","code":"","fl":true,"stages":7,"fav":false},{"acr":"JR","common":"Japanese Rubyfish","sci":"Erythrocles schlegelii","code":"","fl":true,"stages":7,"fav":false},{"acr":"JD","common":"John Dory","sci":"Zeus faber","code":"","fl":false,"stages":7,"fav":false},{"acr":"KW","common":"King George Whiting","sci":"Sillaginodes punctatus","code":"","fl":true,"stages":7,"fav":true},{"acr":"KT","common":"King Threadfin","sci":"Polydactylus macrochir","code":"","fl":true,"stages":7,"fav":false},{"acr":"KN","common":"Knifejaw","sci":"Oplegnathus woodwardi","code":"","fl":false,"stages":7,"fav":false},{"acr":"LJ","common":"Lined Javelinfish","sci":"Hapalogenys dampieriensis","code":"","fl":false,"stages":7,"fav":false},{"acr":"LB","common":"Longfin Bigeye","sci":"Cookeolus japonicus","code":"","fl":false,"stages":7,"fav":false},{"acr":"LE","common":"Longnose Emperor","sci":"Lethrinus olivaceus","code":"","fl":true,"stages":7,"fav":false},{"acr":"LT","common":"Longnose Trevally","sci":"Carangoides chrysophrys","code":"","fl":true,"stages":7,"fav":false},{"acr":"LTU","common":"Longtail Tuna","sci":"Thunnus tonggol","code":"","fl":true,"stages":7,"fav":false},{"acr":"LBI","common":"Lunartail Bigeye","sci":"Priacanthus hamrur","code":"","fl":false,"stages":7,"fav":false},{"acr":"MT","common":"Mackerel Tuna","sci":"Euthynnus affinis","code":"","fl":true,"stages":7,"fav":false},{"acr":"MP","common":"Magpie Perch","sci":"Cheilodactylus nigripes","code":"","fl":true,"stages":7,"fav":false},{"acr":"MJ","common":"Mangrove Jack","sci":"Lutjanus argentimaculatus","code":"","fl":true,"stages":7,"fav":false},{"acr":"MS","common":"Maori Snapper","sci":"Lutjanus rivulatus","code":"","fl":true,"stages":7,"fav":false},{"acr":"MA","common":"Maray","sci":"Etrumeus teres","code":"","fl":true,"stages":7,"fav":false},{"acr":"MSN","common":"Midnight Snapper","sci":"Macolor macularis","code":"","fl":true,"stages":7,"fav":false},{"acr":"MO","common":"Moonlighter","sci":"Tilodon sexfasciatus","code":"","fl":false,"stages":7,"fav":false},{"acr":"MOS","common":"Moses' Snapper","sci":"Lutjanus russellii","code":"","fl":true,"stages":7,"fav":false},{"acr":"MSE","common":"Mozambique Seabream","sci":"Wattsia mossambica","code":"","fl":true,"stages":7,"fav":false},{"acr":"MU","common":"Mulloway","sci":"Argyrosomus japonicus","code":"","fl":false,"stages":7,"fav":false},{"acr":"NP","common":"Northern Pearl Perch","sci":"Glaucosoma buergeri","code":"","fl":false,"stages":7,"fav":false},{"acr":"NF","common":"Northern Sand Flathead","sci":"Platycephalus endrachtensis","code":"","fl":false,"stages":7,"fav":false},{"acr":"NB","common":"Northwest Black Bream","sci":"Acanthopagrus palmaris","code":"","fl":true,"stages":7,"fav":false},{"acr":"OJ","common":"Ocean Jacket","sci":"Nelusetta ayraud","code":"","fl":false,"stages":7,"fav":false},{"acr":"OE","common":"Orangespotted Emperor","sci":"Lethrinus erythracanthus","code":"","fl":true,"stages":7,"fav":false},{"acr":"OB","common":"Oriental Bonito","sci":"Sarda orientalis","code":"","fl":true,"stages":7,"fav":false},{"acr":"OH","common":"Oxeye Herring","sci":"Megalops cyprinoides","code":"","fl":true,"stages":7,"fav":false},{"acr":"PB","common":"Pacific Bonefish","sci":"Albula argentea","code":"","fl":true,"stages":7,"fav":false},{"acr":"PSE","common":"Paddletail Seabream","sci":"Gymnocranius euanus","code":"","fl":true,"stages":7,"fav":false},{"acr":"PSW","common":"Painted Sweetlips","sci":"Diagramma labiosum","code":"","fl":false,"stages":7,"fav":false},{"acr":"PT","common":"Passionfruit Coral Trout","sci":"Plectropomus areolatus","code":"","fl":false,"stages":7,"fav":false},{"acr":"PR","common":"Peacock Rockcod","sci":"Cephalopholis argus","code":"","fl":false,"stages":7,"fav":false},{"acr":"PSH","common":"Pencil Shark","sci":"Hypogaleus hyugaensis","code":"","fl":false,"grp":"shark","stages":7,"fav":false},{"acr":"PE","common":"Pennantfish","sci":"Alectis ciliaris","code":"","fl":true,"stages":7,"fav":false},{"acr":"PH","common":"Perth Herring","sci":"Nematalosa vlaminghi","code":"","fl":true,"stages":7,"fav":false},{"acr":"PL","common":"Pink Ling","sci":"Genypterus blacodes","code":"","fl":false,"stages":7,"fav":false},{"acr":"PS","common":"Pink Snapper","sci":"Chrysophrys auratus","code":"353001","fl":true,"stages":7,"fav":true},{"acr":"PJS","common":"Port Jackson Shark","sci":"Heterodontus portusjacksoni","code":"","fl":false,"grp":"shark","stages":7,"fav":false},{"acr":"PTU","common":"Purple Tuskfish","sci":"Choerodon cephalotes","code":"","fl":false,"stages":7,"fav":false},{"acr":"QG","common":"Queensland Groper","sci":"Epinephelus lanceolatus","code":"","fl":false,"stages":7,"fav":false},{"acr":"RR","common":"Radiant Rockcod","sci":"Epinephelus radiatus","code":"","fl":false,"stages":7,"fav":false},{"acr":"RB","common":"Rainbow Monocle Bream","sci":"Scolopsis monogramma","code":"","fl":true,"stages":7,"fav":false},{"acr":"RRU","common":"Rainbow Runner","sci":"Elagatis bipinnulata","code":"","fl":true,"stages":7,"fav":false},{"acr":"RC","common":"Rankin Cod","sci":"Epinephelus multinotatus","code":"","fl":false,"stages":7,"fav":false},{"acr":"RBA","common":"Red Bass","sci":"Lutjanus bohar","code":"","fl":true,"stages":7,"fav":false},{"acr":"RE","common":"Red Emperor","sci":"Lutjanus sebae","code":"","fl":true,"stages":7,"fav":true},{"acr":"RG","common":"Red Gurnard","sci":"Chelidonichthys kumu","code":"","fl":false,"stages":7,"fav":false},{"acr":"RED","common":"Redfin","sci":"Perca fluviatilis","code":"","fl":false,"stages":7,"fav":false},{"acr":"RM","common":"Redlip Morwong","sci":"Cheilodactylus rubrolabiatus","code":"","fl":true,"stages":7,"fav":false},{"acr":"RP","common":"Redspot Emperor","sci":"Lethrinus lentjan","code":"","fl":true,"stages":7,"fav":false},{"acr":"RW","common":"Redspot Wrasse","sci":"Stethojulis bandanensis","code":"","fl":false,"stages":7,"fav":false},{"acr":"REM","common":"Redthroat Emperor","sci":"Lethrinus miniatus","code":"","fl":true,"stages":7,"fav":false},{"acr":"RI","common":"Ribaldo","sci":"Mora mora","code":"","fl":false,"stages":7,"fav":false},{"acr":"RS","common":"Robinson's Seabream","sci":"Gymnocranius grandoculis","code":"","fl":true,"stages":7,"fav":false},{"acr":"RF","common":"Rock Flathead","sci":"Platycephalus laevigatus","code":"","fl":false,"stages":7,"fav":false},{"acr":"RGO","common":"Rosy Goatfish","sci":"Parupeneus chrysopleuron","code":"","fl":true,"stages":7,"fav":false},{"acr":"RSN","common":"Rosy Snapper","sci":"Pristipomoides filamentosus","code":"","fl":true,"stages":7,"fav":false},{"acr":"RTB","common":"Rosy Threadfin Bream","sci":"Nemipterus furcosus","code":"","fl":true,"stages":7,"fav":false},{"acr":"RU","common":"Ruby Snapper","sci":"Etelis carbunculus","code":"","fl":true,"stages":7,"fav":false},{"acr":"RJ","common":"Rusty Jobfish","sci":"Aphareus rutilans","code":"","fl":true,"stages":7,"fav":false},{"acr":"SS","common":"Saddletail Snapper","sci":"Lutjanus malabaricus","code":"","fl":true,"stages":7,"fav":false},{"acr":"SAI","common":"Sailfish","sci":"Istiophorus platypterus","code":"","fl":true,"stages":7,"fav":false},{"acr":"SA","common":"Samsonfish","sci":"Seriola hippos","code":"","fl":true,"stages":7,"fav":false},{"acr":"SBA","common":"Sand Bass","sci":"Psammoperca waigiensis","code":"","fl":false,"stages":7,"fav":false},{"acr":"SSH","common":"Sandbar Shark","sci":"Carcharhinus plumbeus","code":"","fl":false,"grp":"shark","stages":7,"fav":false},{"acr":"SSP","common":"Sandy Sprat","sci":"Hyperlophus vittatus","code":"","fl":true,"stages":7,"fav":false},{"acr":"SH","common":"Scalloped Hammerhead","sci":"Sphyrna lewini","code":"","fl":false,"grp":"shark","stages":7,"fav":false},{"acr":"SC","common":"Scaly Mackerel","sci":"Sardinella lemuru","code":"","fl":true,"stages":7,"fav":false},{"acr":"SCA","common":"Scalyfin","sci":"Parma victoriae","code":"","fl":false,"stages":7,"fav":false},{"acr":"SCH","common":"School Mackerel","sci":"Scomberomorus queenslandicus","code":"","fl":true,"stages":7,"fav":false},{"acr":"SSA","common":"School Shark","sci":"Galeorhinus galeus","code":"","fl":false,"grp":"shark","stages":7,"fav":false},{"acr":"SM","common":"Sea Mullet","sci":"Mugil cephalus","code":"","fl":true,"stages":7,"fav":false},{"acr":"SSW","common":"Sea Sweep","sci":"Scorpis aequipinnis","code":"","fl":true,"stages":7,"fav":false},{"acr":"ST","common":"Sea Trumpeter","sci":"Pelsartia humeralis","code":"","fl":false,"stages":7,"fav":false},{"acr":"SB","common":"Sergeant Baker","sci":"Latropiscis purpurissatus","code":"","fl":false,"stages":7,"fav":false},{"acr":"SHA","common":"Shark Mackerel","sci":"Grammatorcynus bicarinatus","code":"","fl":true,"stages":7,"fav":false},{"acr":"SSN","common":"Sharptooth Snapper","sci":"Pristipomoides typus","code":"","fl":true,"stages":7,"fav":false},{"acr":"SHO","common":"Shortfin Mako","sci":"Isurus oxyrinchus","code":"","fl":false,"grp":"shark","stages":7,"fav":false},{"acr":"SCO","common":"Silver Cobbler","sci":"Neoarius midgleyi","code":"","fl":true,"stages":7,"fav":false},{"acr":"SD","common":"Silver Drummer","sci":"Kyphosus sydneyanus","code":"","fl":true,"stages":7,"fav":false},{"acr":"STR","common":"Silver Trevally","sci":"Pseudocaranx georgianus","code":"","fl":true,"stages":7,"fav":false},{"acr":"SL","common":"Sixspine Leatherjacket","sci":"Meuschenia freycineti","code":"","fl":false,"stages":7,"fav":false},{"acr":"SK","common":"Skipjack Trevally","sci":"Pseudocaranx wrighti","code":"","fl":true,"stages":7,"fav":false},{"acr":"STU","common":"Skipjack Tuna","sci":"Katsuwonus pelamis","code":"","fl":true,"stages":7,"fav":false},{"acr":"SF","common":"Smalltooth Flounder","sci":"Pseudorhombus jenynsii","code":"","fl":false,"stages":7,"fav":false},{"acr":"SMO","common":"Smooth Hammerhead","sci":"Sphyrna zygaena","code":"","fl":false,"grp":"shark","stages":7,"fav":false},{"acr":"SN","common":"Snook","sci":"Sphyraena novaehollandiae","code":"","fl":true,"stages":7,"fav":false},{"acr":"SBD","common":"Southern Blue Devil","sci":"Paraplesiops meleagris","code":"","fl":false,"stages":7,"fav":false},{"acr":"SBT","common":"Southern Bluefin Tuna","sci":"Thunnus maccoyii","code":"","fl":true,"stages":7,"fav":false},{"acr":"SBF","common":"Southern Bluespotted Flathead","sci":"Platycephalus speculator","code":"","fl":false,"stages":7,"fav":false},{"acr":"SR","common":"Southern Eagle Ray","sci":"Myliobatis australis","code":"","fl":false,"grp":"shark","stages":7,"fav":false},{"acr":"SG","common":"Southern Garfish","sci":"Hyporhamphus melanochir","code":"","fl":true,"stages":7,"fav":false},{"acr":"SMW","common":"Southern Maori Wrasse","sci":"Ophthalmolepis lineolatus","code":"","fl":false,"stages":7,"fav":false},{"acr":"SWH","common":"Southern School Whiting","sci":"Sillago bassensis","code":"","fl":true,"stages":7,"fav":false},{"acr":"SE","common":"Spangled Emperor","sci":"Lethrinus nebulosus","code":"","fl":true,"stages":7,"fav":true},{"acr":"SP","common":"Spangled Perch","sci":"Leiopotherapon unicolor","code":"","fl":false,"stages":7,"fav":false},{"acr":"SMA","common":"Spanish Mackerel","sci":"Scomberomorus commerson","code":"","fl":true,"stages":7,"fav":false},{"acr":"SPI","common":"Spinner Shark","sci":"Carcharhinus brevipinna","code":"","fl":false,"grp":"shark","stages":7,"fav":false},{"acr":"SEM","common":"Spotcheek Emperor","sci":"Lethrinus rubrioperculatus","code":"","fl":true,"stages":7,"fav":false},{"acr":"SPO","common":"Spotted Mackerel","sci":"Scomberomorus munroi","code":"","fl":true,"stages":7,"fav":false},{"acr":"STN","common":"Stripey Snapper","sci":"Lutjanus carponotatus","code":"","fl":true,"stages":7,"fav":false},{"acr":"SU","common":"Sunburnt Pigfish","sci":"Bodianus solatus","code":"","fl":false,"stages":7,"fav":false},{"acr":"SW","common":"Swallowtail","sci":"Centroberyx lineatus","code":"","fl":true,"stages":7,"fav":false},{"acr":"SWO","common":"Swordfish","sci":"Xiphias gladius","code":"","fl":true,"stages":7,"fav":false},{"acr":"TA","common":"Tailor","sci":"Pomatomus saltatrix","code":"","fl":true,"stages":7,"fav":false},{"acr":"TS","common":"Tang's Snapper","sci":"Lipocheilus carnolabrum","code":"","fl":true,"stages":7,"fav":false},{"acr":"TAR","common":"Tarwhine","sci":"Rhabdosargus sarba","code":"","fl":true,"stages":7,"fav":false},{"acr":"TG","common":"Three-By-Two Garfish","sci":"Hemiramphus robustus","code":"","fl":true,"stages":7,"fav":false},{"acr":"TSH","common":"Tiger Shark","sci":"Galeocerdo cuvier","code":"","fl":false,"grp":"shark","stages":7,"fav":false},{"acr":"TT","common":"Tille Trevally","sci":"Caranx tille","code":"","fl":true,"stages":7,"fav":false},{"acr":"TR","common":"Tomato Rockcod","sci":"Cephalopholis sonnerati","code":"","fl":false,"stages":7,"fav":false},{"acr":"TRI","common":"Tripletail","sci":"Lobotes surinamensis","code":"","fl":true,"stages":7,"fav":false},{"acr":"TU","common":"Turrum","sci":"Carangoides fulvoguttatus","code":"","fl":true,"stages":7,"fav":false},{"acr":"VC","common":"Vermicular Cod","sci":"Plectropomus oligacanthus","code":"","fl":false,"stages":7,"fav":false},{"acr":"WA","common":"Wahoo","sci":"Acanthocybium solandri","code":"","fl":true,"stages":7,"fav":false},{"acr":"DU","common":"West Australian Dhufish","sci":"Glaucosoma hebraicum","code":"320004","fl":false,"stages":7,"fav":true},{"acr":"WS","common":"Western Australian Salmon","sci":"Arripis truttaceus","code":"","fl":true,"stages":7,"fav":false},{"acr":"WD","common":"Western Blue Devil","sci":"Paraplesiops sinclairi","code":"","fl":false,"stages":7,"fav":false},{"acr":"WG","common":"Western Blue Groper","sci":"Achoerodus gouldii","code":"","fl":false,"stages":7,"fav":true},{"acr":"WB","common":"Western Buffalo Bream","sci":"Kyphosus cornelii","code":"","fl":true,"stages":7,"fav":false},{"acr":"WBU","common":"Western Butterfish","sci":"Pentapodus vitta","code":"","fl":true,"stages":7,"fav":false},{"acr":"WGO","common":"Western Gobbleguts","sci":"Ostorhinchus rueppellii","code":"","fl":false,"stages":7,"fav":false},{"acr":"WW","common":"Western King Wrasse","sci":"Coris auricularis","code":"","fl":false,"stages":7,"fav":false},{"acr":"WRS","common":"Western Red Scorpionfish","sci":"Scorpaena sumptuosa","code":"","fl":false,"stages":7,"fav":false},{"acr":"WRB","common":"Western Rock Blackfish","sci":"Girella tephraeops","code":"","fl":true,"stages":7,"fav":false},{"acr":"WSW","common":"Western School Whiting","sci":"Sillago vittata","code":"","fl":true,"stages":7,"fav":false},{"acr":"WR","common":"Western Shovelnose Ray","sci":"Aptychotrema vincentiana","code":"","fl":false,"grp":"shark","stages":7,"fav":false},{"acr":"WSG","common":"Western Sooty Grunter","sci":"Hephaestus jenkinsi","code":"","fl":false,"stages":7,"fav":false},{"acr":"WGR","common":"Western Striped Grunter","sci":"Pelates octolineatus","code":"","fl":false,"stages":7,"fav":false},{"acr":"WTW","common":"Western Trumpeter Whiting","sci":"Sillago burrus","code":"","fl":true,"stages":7,"fav":false},{"acr":"WWI","common":"Western Wirrah","sci":"Acanthistius serratus","code":"","fl":false,"stages":7,"fav":false},{"acr":"WYB","common":"Western Yellowfin Bream","sci":"Acanthopagrus morrisoni","code":"","fl":true,"stages":7,"fav":false},{"acr":"WSH","common":"Whiskery Shark","sci":"Furgaleus macki","code":"","fl":false,"grp":"shark","stages":7,"fav":false},{"acr":"WH","common":"Whitetip Reef Shark","sci":"Triaenodon obesus","code":"","fl":false,"grp":"shark","stages":7,"fav":false},{"acr":"YB","common":"Yellowback Bream","sci":"Dentex spariformis","code":"","fl":true,"stages":7,"fav":false},{"acr":"YT","common":"Yellowedge Coronation Trout","sci":"Variola louti","code":"","fl":false,"stages":7,"fav":false},{"acr":"YM","common":"Yelloweye Mullet","sci":"Aldrichetta forsteri","code":"","fl":true,"stages":7,"fav":false},{"acr":"YR","common":"Yelloweye Redfish","sci":"Centroberyx australis","code":"","fl":true,"stages":7,"fav":false},{"acr":"YTU","common":"Yellowfin Tuna","sci":"Thunnus albacares","code":"","fl":true,"stages":7,"fav":false},{"acr":"YW","common":"Yellowfin Whiting","sci":"Sillago schomburgkii","code":"","fl":true,"stages":7,"fav":false},{"acr":"YE","common":"Yellowlip Emperor","sci":"Lethrinus xanthochilus","code":"","fl":true,"stages":7,"fav":false},{"acr":"YRO","common":"Yellowspotted Rockcod","sci":"Epinephelus areolatus","code":"","fl":false,"stages":7,"fav":false},{"acr":"YBA","common":"Yellowtail Barracuda","sci":"Sphyraena obtusata","code":"","fl":true,"stages":7,"fav":false},{"acr":"YEM","common":"Yellowtail Emperor","sci":"Lethrinus atkinsoni","code":"","fl":true,"stages":7,"fav":false},{"acr":"YF","common":"Yellowtail Flathead","sci":"Platycephalus westraliae","code":"","fl":false,"stages":7,"fav":false},{"acr":"YFU","common":"Yellowtail Fusilier","sci":"Caesio cuning","code":"","fl":true,"stages":7,"fav":false},{"acr":"YK","common":"Yellowtail Kingfish","sci":"Seriola lalandi","code":"","fl":true,"stages":7,"fav":false},{"acr":"YS","common":"Yellowtail Scad","sci":"Trachurus novaezelandiae","code":"","fl":true,"stages":7,"fav":false},{"acr":"ZE","common":"Zebrafish","sci":"Girella zebra","code":"","fl":true,"stages":7,"fav":false}];
+/* Header dropdowns: placeholder values until the Access lookup tables arrive. "Other" lets staff type a value;
+   typed values are remembered on this iPad. */
+const LISTS={
+  bioregion:['West Coast','South Coast','Gascoyne Coast','North Coast'],
+  zone:['Kalbarri','Mid-West','Metropolitan','South-West','South Coast','Abrolhos'],
+  collPoint:['Unknown','Market Fresh','Boat ramp','Processor','Research vessel','Charter vessel'],
+  method:['LINE','DROPLINE','TRAP','SPEAR','NET'],
+  collector:['Research','Commercial','Recreational','Charter'],
+  sector:['Research','Commercial','Recreational','Charter'],
+  bait:['Bait','Lure','Jig']
+};
+const SEX=[['M','Male'],['F','Female'],['U','Unknown'],['T','Transitional']];
+const GEN={
+  storage:{l:'Storage before processing',o:[['IB','ice/brine'],['FR','fridge'],['FZ','freezer'],['N','not chilled'],['IB-FR','ice then fridge']]},
+  gmethod:{l:'Method',o:[['B','biopsy'],['S','scalpel'],['K','knife'],['X','scissors']]},
+  tissue:{l:'Tissue',o:[['N','nape'],['C','cheek'],['F','fin']]}
+};
+const FATHOM=1.8288;
+/* Measurement tiles: keypad fields. dp = decimals allowed. */
+const TILES={tl:{l:'TL',u:'mm',max:4,dp:0},fl:{l:'FL',u:'mm',max:4,dp:0},wt:{l:'Total wt',u:'g',max:6,dp:0},gwt:{l:'Gonad wt',u:'g',max:6,dp:2},
+  jaw:{l:'Jaw length',u:'mm',max:4,dp:0},eye:{l:'Eye orbit',u:'mm',max:4,dp:1},block:{l:'Block no',u:'',max:5,dp:0},depth:{l:'Depth',u:'m',max:5,dp:1}};
+const MAIN_TILES=['tl','fl','wt','gwt'], MORE_TILES=['jaw','eye','block','depth'];
+
+/* ---------- state ---------- */
+let S=null, view='batches', spQ='';
+/* After each save the species, Otoliths/Gonads choices and the genetics storage/method/tissue codes carry over to the next fish;
+   Genetics itself switches off again because only some fish are sampled. */
+function blankCur(keep){const k=keep||{};return {sp:k.sp||null,tl:'',fl:'',wt:'',gwt:'',sex:'',stage:'',
+  oto:k.oto!=null?k.oto:true,his:!!k.his,gen:false,storage:k.storage||'',gmethod:k.gmethod||'',tissue:k.tissue||'',gnote:k.gnote||'',
+  time:'',block:'',depth:'',jaw:'',eye:'',tlcalc:false,otoslide:'',tag:'',cmt:'',code:'',focus:'tl',editId:null,ack:false,warn:[],more:!!k.more}}
+function defaultHeader(prev){const p=prev||{},t=todayISO();
+  return {project:fyOf(t),capDate:t,procDate:t,procInit:p.procInit||'',procName:p.procName||'',scribe:p.scribe||'',
+    bioregion:'',zone:'',location:'',lat:'',lon:'',mapRef:'',depth:'',depthUnit:'m',
+    collPoint:'',method:'',collector:'',sector:'',bait:'',fisherId:'',fisherName:'',temp:'',sal:'',comments:'',nsSp:'',nsN:'',multiBlock:''}}
+function fresh(){return {app:'lab-logger',device:'',devName:'',staff:[],spEdits:{},spCustom:[],extra:{},batches:[],fish:[],issued:{},
+  active:null,cur:blankCur(),ui:{theme:'light'},backup:null,savedAt:''}}
+function fillDefaults(s){const f=fresh();Object.keys(f).forEach(k=>{if(s[k]==null)s[k]=f[k]});s.cur=Object.assign(blankCur(),s.cur||{});return s}
+const activeB=()=>S.batches.find(b=>b.id===S.active)||null;
+const bFish=id=>S.fish.filter(f=>f.batch===id);
+
+/* species */
+let _sp=null;const spReset=()=>{_sp=null};
+function spAll(){if(_sp)return _sp;const m=new Map();
+  BASE_SP.concat(S.spCustom||[]).forEach(s=>m.set(s.sci,Object.assign({},s,S.spEdits[s.sci]||{})));_sp=m;return m}
+const spBy=k=>spAll().get(k)||null;
+const spName=k=>{const s=spBy(k);return s?s.common:(k||'')};
+
+/* ---------- sample codes ----------
+   Code = species acronym + processor initials + capture date (YYMMDD) + iPad letter + batch letter + "-" + fish number.
+   e.g. PSVM260922KA-01. The fish number runs separately for each species within a batch.
+   Every code this iPad has ever issued is kept in S.issued (including deleted and renamed ones), and a code
+   already in that list is never issued again. Two iPads cannot clash because each has its own letter. */
+function mid(b,h){h=h||b.h;return (h.procInit||'')+yymmdd(h.capDate)+(b.dev||S.device||'')}
+function codeMissing(b){if(!b)return 'Open or start a batch first';
+  if(!b.dev&&!S.device)return 'Set this iPad\'s letter in Setup';
+  if(!b.h.procInit)return 'Choose the person processing in the Header (their initials go in the code)';
+  if(!yymmdd(b.h.capDate))return 'Enter the capture date in the Header';return ''}
+function letterUsed(m,L,exceptBatch){
+  if(S.batches.some(x=>x.id!==exceptBatch&&x.letter===L&&mid(x)===m))return true;
+  const needle=m+L+'-';for(const c in S.issued){if(c.includes(needle)&&S.issued[c].b!==exceptBatch)return true}return false}
+function freeLetter(b){const m=mid(b);for(let i=0;i<26;i++){const L=String.fromCharCode(65+i);if(!letterUsed(m,L,b.id))return L}return 'Z'}
+const batchLetter=b=>b.letter||freeLetter(b);
+const batchTag=b=>codeMissing(b)?'':mid(b)+batchLetter(b);
+const codeNo=c=>{const m=/-(\d+)$/.exec(c||'');return m?+m[1]:0};
+function nextCode(b,acr){const p=acr+mid(b)+batchLetter(b)+'-';let n=0;
+  for(const c in S.issued)if(c.startsWith(p))n=Math.max(n,codeNo(c));
+  S.fish.forEach(f=>{if(f.code&&f.code.startsWith(p))n=Math.max(n,codeNo(f.code))});
+  let code;do{n++;code=p+String(n).padStart(2,'0')}while(S.issued[code]);return code}
+function dupCodes(){const seen=new Map(),d=new Set();S.fish.forEach(f=>{if(seen.has(f.code))d.add(f.code);seen.set(f.code,1)});return [...d]}
+
+/* ---------- storage: two independent copies on the iPad (as Catch Logger) ---------- */
+let db=null,dbOk=null,lsOk=true,writing=Promise.resolve(),pend=false;const savedJson=new Map();
+function openDB(){return new Promise(res=>{try{const rq=indexedDB.open(DB_NAME,1);
+  rq.onupgradeneeded=()=>{const d=rq.result;if(!d.objectStoreNames.contains('meta'))d.createObjectStore('meta');if(!d.objectStoreNames.contains('fish'))d.createObjectStore('fish',{keyPath:'id'})};
+  rq.onsuccess=()=>res(rq.result);rq.onerror=()=>res(null);rq.onblocked=()=>res(null)}catch(e){res(null)}})}
+function idbLoad(){return new Promise(res=>{try{const tx=db.transaction(['meta','fish'],'readonly');let meta=null,fs=[];
+  tx.objectStore('meta').get('state').onsuccess=e=>{meta=e.target.result||null};tx.objectStore('fish').getAll().onsuccess=e=>{fs=e.target.result||[]};
+  tx.oncomplete=()=>res(meta?Object.assign({},meta,{fish:fs}):null);tx.onerror=tx.onabort=()=>res(null)}catch(e){res(null)}})}
+function idbWrite(){return new Promise(res=>{try{const meta=Object.assign({},S);delete meta.fish;
+  const tx=db.transaction(['meta','fish'],'readwrite'),os=tx.objectStore('fish'),seen=new Set(),changed=[];
+  S.fish.forEach(r=>{seen.add(r.id);const j=JSON.stringify(r);if(savedJson.get(r.id)!==j){os.put(JSON.parse(j));changed.push([r.id,j])}});
+  const gone=[...savedJson.keys()].filter(id=>!seen.has(id));gone.forEach(id=>os.delete(id));
+  tx.objectStore('meta').put(JSON.parse(JSON.stringify(meta)),'state');
+  tx.oncomplete=()=>{changed.forEach(([i,j])=>savedJson.set(i,j));gone.forEach(i=>savedJson.delete(i));res(true)};
+  tx.onerror=tx.onabort=()=>res(false)}catch(e){res(false)}})}
+function lsLoad(){try{const t=localStorage.getItem(LS_KEY);if(t)return JSON.parse(t)}catch(e){}return null}
+function save(){S.savedAt=new Date().toISOString();
+  lsOk=true;try{localStorage.setItem(LS_KEY,JSON.stringify(S))}catch(e){lsOk=false}
+  if(db){if(!pend){pend=true;writing=writing.then(()=>{pend=false;return idbWrite()}).then(ok=>{dbOk=ok;saveStatus()})}}else dbOk=false;
+  saveStatus()}
+function saveStatus(){const ok=lsOk||dbOk===true||(dbOk===null&&!!db),p=$('#savePill');
+  p.textContent=ok?'Saved on device':'NOT SAVING';p.className='pill '+(ok?'ok':'bad');$('#saveFail').hidden=ok;renderBk()}
+
+/* ---------- backups ---------- */
+function bkLevel(){const bk=S.backup&&S.backup.at?new Date(S.backup.at):null;
+  const since=S.fish.filter(r=>!bk||new Date(r.edited||r.ts)>bk).length,mins=bk?(Date.now()-bk)/60000:Infinity;
+  if(!S.fish.length)return {lvl:'ok',txt:'No data yet'};
+  if(!bk)return {lvl:'red',txt:`Not backed up · ${since} fish`};
+  const lvl=since===0?'ok':(since>=300||mins>=240)?'red':(since>=100||mins>=120)?'amb':'ok';
+  return {lvl,txt:`Backup ${hm(S.backup.at)}${since?` · ${since} since`:' · up to date'}`}}
+function renderBk(){const b=$('#bkPill');if(!b||!S)return;const {lvl,txt}=bkLevel();b.textContent=txt;b.className='uibtn bk '+lvl}
+setInterval(()=>{try{renderBk()}catch(e){}},60000);
+function stampName(){const d=new Date();return `${d.getFullYear()}${z(d.getMonth()+1)}${z(d.getDate())}-${z(d.getHours())}${z(d.getMinutes())}`}
+async function fullBackup(){
+  const name=`lablogger_backup_${S.device||'X'}_${stampName()}.json`;
+  const body=JSON.stringify({app:'lab-logger',format:1,appVersion:APP_VERSION,exportedAt:new Date().toISOString(),device:S.device,
+    counts:{batches:S.batches.length,fish:S.fish.length},state:S});
+  const ok=await shareFiles([new File([body],name,{type:'application/json'})],name,`Backup saved (${S.fish.length} fish)`);
+  if(ok){S.backup={at:new Date().toISOString()};save()}return ok}
+/* iOS only shares straight after a tap; if that fails, offer a "ready" button. */
+async function shareFiles(files,title,okMsg){
+  try{if(navigator.canShare&&navigator.canShare({files})){await navigator.share({files,title});toast(okMsg);return true}}
+  catch(e){if(e&&e.name==='AbortError'){toast('Cancelled. Data is still on this iPad');return false}
+    if(e&&e.name==='NotAllowedError')return readyToShare(files,title,okMsg)}
+  if(window.top!==window.self){toast('Files save from the installed app, not this preview');return false}
+  files.forEach((f,i)=>setTimeout(()=>{const a=document.createElement('a');a.href=URL.createObjectURL(f);a.download=f.name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},800)},i*600));
+  toast(okMsg);return true}
+function readyToShare(files,title,okMsg){return new Promise(res=>{
+  modal(`<h3>Ready to save</h3><p class="note">${files.length} file(s) prepared.</p><div class="actions"><button class="btn primary" id="mGo">Save / share now</button><button class="btn" id="mNo">Cancel</button></div>`);
+  $('#mGo').onclick=async()=>{closeModal();try{await navigator.share({files,title});toast(okMsg);res(true)}catch(e){toast('Not saved');res(false)}};
+  $('#mNo').onclick=()=>{closeModal();res(false)}})}
+
+/* ---------- small UI helpers ---------- */
+let toastT;function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('on');clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('on'),1900)}
+function modal(html){const m=$('#modal');m.innerHTML=`<div class="mbox" role="dialog" aria-modal="true">${html}</div>`;m.hidden=false}
+function closeModal(){const m=$('#modal');m.hidden=true;m.innerHTML=''}
+function armed(btn,label,fn){
+  if(btn.dataset.armed==='1'){btn.dataset.armed='';btn.classList.remove('armed');fn();return}
+  const old=btn.textContent;btn.dataset.armed='1';btn.classList.add('armed');btn.textContent=label;
+  setTimeout(()=>{if(btn.dataset.armed==='1'){btn.dataset.armed='';btn.classList.remove('armed');btn.textContent=old}},3000)}
+function applyUi(){const t=(S.ui&&S.ui.theme)||'light';document.documentElement.dataset.theme=t;$('#themeBtn').textContent=t==='dark'?'Light mode':'Dark mode'}
+$('#themeBtn').onclick=()=>{S.ui.theme=S.ui.theme==='dark'?'light':'dark';applyUi();save()};
+$('#bkPill').onclick=()=>fullBackup();$('#bkNow2').onclick=()=>fullBackup();
+$('#nav').onclick=e=>{const b=e.target.closest('[data-v]');if(b)show(b.dataset.v)};
+
+function renderTop(){const b=activeB();
+  $('#bTitle').textContent=b?(b.h.location||'No location yet')+' · '+(dmy(b.h.capDate)||'no date'):'No batch open';
+  $('#bSub').textContent=b?`${batchTag(b)||'code not set'}${b.letter?'':' (provisional)'} · ${bFish(b.id).length} fish · ${b.h.collector||'collector ?'}`:'Start or open a batch';
+  document.querySelectorAll('#nav [data-v]').forEach(x=>x.setAttribute('aria-current',x.dataset.v===view?'page':'false'))}
+function show(v){view=v;const el=$('#view');el.className='';el.onclick=null;el.oninput=null;
+  ({batches:viewBatches,header:viewHeader,entry:viewEntry,sheet:viewSheet,export:viewExport,setup:viewSetup}[v]||viewBatches)();renderTop();$('#main').scrollTop=0}
+
+/* ================= BATCHES ================= */
+function viewBatches(){const el=$('#view');el.className='page';
+  const dups=dupCodes(),bs=S.batches.slice().sort((a,b)=>String(b.created).localeCompare(String(a.created)));
+  el.innerHTML=`<h2>Batches</h2>
+  ${S.device?'':`<div class="warn">This iPad has no letter yet. Set it in <b>Setup</b> before the first batch; the letter goes into every sample code so two iPads never issue the same code.</div>`}
+  ${dups.length?`<div class="dupe">Duplicate sample codes found (${dups.length}): ${esc(dups.slice(0,6).join(', '))}${dups.length>6?'…':''}. Open the batch and use <b>Rename codes</b>, or edit the fish, before exporting.</div>`:''}
+  <div class="actions"><button class="btn primary" id="newB"${S.device?'':' disabled'}>+ New batch</button>${S.device?'':'<button class="btn" id="goSetup">Go to Setup</button>'}</div>
+  <p class="note">One batch = one sheet: the fish from one fisher or source, one capture date and one processing session. Tap <b>Fish entry</b> to keep entering, <b>Header</b> to fill in where the fish came from.</p>
+  <div class="bcards">${bs.map(b=>{const fs=bFish(b.id),t={};fs.forEach(f=>{const n=spName(f.sp);t[n]=(t[n]||0)+1});
+    return `<div class="bcard${b.id===S.active?' act':''}"><div><h3>${esc(b.h.location||'No location')} · ${esc(dmy(b.h.capDate)||'no date')}</h3>
+      <div><span class="code">${esc(batchTag(b)||'code not set')}</span>${b.letter?'':' <span class="muted small">(letter provisional until the first fish)</span>'} <span class="stat ${b.done?'ok':fs.length?'prog':''}">${b.done?'Complete':fs.length?'In progress':'Empty'}</span></div>
+      <div class="muted small">${esc([b.h.collector,b.h.collPoint,b.h.fisherName,b.h.procName&&('processed by '+b.h.procName)].filter(Boolean).join(' · '))}</div>
+      <div class="tally" style="margin-top:6px">${Object.entries(t).map(([k,v])=>`<span>${esc(k)} <b>${v}</b></span>`).join('')||'<span class="muted">No fish yet</span>'}</div></div>
+      <div class="acts"><button class="btn primary" data-open="${b.id}">Fish entry</button><button class="btn" data-hdr="${b.id}">Header</button><button class="btn" data-sheet="${b.id}">Sheet</button><button class="btn" data-done="${b.id}">${b.done?'Reopen':'Mark complete'}</button></div></div>`}).join('')||'<p class="note">No batches yet.</p>'}</div>`;
+  const nb=$('#newB');if(nb)nb.onclick=newBatch;const gs=$('#goSetup');if(gs)gs.onclick=()=>show('setup');
+  el.querySelectorAll('[data-open]').forEach(x=>x.onclick=()=>{activate(x.dataset.open);show('entry')});
+  el.querySelectorAll('[data-hdr]').forEach(x=>x.onclick=()=>{activate(x.dataset.hdr);show('header')});
+  el.querySelectorAll('[data-sheet]').forEach(x=>x.onclick=()=>{activate(x.dataset.sheet);show('sheet')});
+  el.querySelectorAll('[data-done]').forEach(x=>x.onclick=()=>{const b=S.batches.find(y=>y.id===x.dataset.done);b.done=!b.done;save();viewBatches()})}
+function activate(id){if(S.active!==id){const keep=S.cur,last=bFish(id).slice(-1)[0];S.active=id;S.cur=blankCur({oto:keep.oto,his:keep.his,more:keep.more,sp:last?last.sp:null})}save()}
+function newBatch(){const last=S.batches.slice().sort((a,b)=>String(b.created).localeCompare(String(a.created)))[0];
+  const b={id:uid(),created:new Date().toISOString(),dev:S.device,letter:'',done:false,h:defaultHeader(last&&last.h)};
+  S.batches.push(b);activate(b.id);toast('New batch started. Fill in the header');show('header')}
+
+/* ================= HEADER ================= */
+function chipField(key,label,list,h,cls){const opts=[...LISTS[list],...((S.extra[list])||[])],v=h[key]||'',other=v&&!opts.includes(v);
+  return `<div class="field ${cls||'wide'}"><span class="flab">${label}</span><div class="chips" data-chip="${key}" data-list="${list}">
+    ${opts.map(o=>`<button class="btn" data-v="${esc(o)}" aria-pressed="${v===o}">${esc(o)}</button>`).join('')}
+    <button class="btn" data-v="__other" aria-pressed="${other}">Other…</button>
+    <input class="txt" data-otherfor="${key}" placeholder="Type other value" value="${other?esc(v):''}"${other?'':' hidden'} aria-label="${label} other value"></div></div>`}
+function staffChips(key,h){const st=S.staff||[];
+  return `<div class="chips" data-staff="${key}">${st.map(p=>`<button class="btn" data-init="${esc(p.init)}" aria-pressed="${h[key==='proc'?'procInit':'scribe']===p.init}">${esc(p.name)} <span class="muted small">${esc(p.init)}</span></button>`).join('')||'<span class="note">Add staff in Setup first.</span>'}</div>`}
+function viewHeader(){const el=$('#view');el.className='page';const b=activeB();
+  if(!b){el.innerHTML=`<h2>Header</h2><p class="note">No batch is open.</p><div class="actions"><button class="btn primary" id="gb">Go to Batches</button></div>`;$('#gb').onclick=()=>show('batches');return}
+  const h=b.h,n=bFish(b.id).length,lock=n>0,F=(k,l,t,x)=>`<div class="field ${x&&x.cls||''}"><label for="h_${k}">${l}</label><input id="h_${k}" data-h="${k}" type="${t||'text'}" value="${esc(h[k])}"${x&&x.im?` inputmode="${x.im}"`:''}${x&&x.ph?` placeholder="${x.ph}"`:''}${x&&x.dis?' disabled':''}${x&&x.list?` list="${x.list}"`:''} autocomplete="off"></div>`;
+  const locs=[...new Set(S.batches.map(x=>x.h.location).filter(Boolean))];
+  el.innerHTML=`<h2>Batch header</h2>
+  <div class="panel"><span class="lbl">Sample code</span>
+    <div class="codebox${codeMissing(b)?' miss':''}"><b>${esc(codeMissing(b)?codeMissing(b):'XX'+batchTag(b)+'-01')}</b><span class="small">${codeMissing(b)?'':'XX = species acronym. Processor '+esc(h.procInit)+' · capture '+esc(yymmdd(h.capDate))+' · iPad '+esc(b.dev||S.device)+' · batch '+esc(batchLetter(b))+(b.letter?'':' (provisional)')}</span></div>
+    ${lock?`<p class="note">${n} fish already have codes, so the processor, capture date and batch letter are locked. Use <b>Rename codes</b> to change them for every fish in this batch at once.</p><div class="actions"><button class="btn" id="renB">Rename codes…</button></div>`:''}
+  </div>
+  <div class="panel"><span class="lbl">Batch</span><div class="form">
+    ${F('project','Project')}${F('capDate','Date of capture','date',{dis:lock})}${F('procDate','Date of processing','date')}
+    <div class="field wide"><span class="flab">Processed by (initials go in the code)</span>${lock?`<p class="note">${esc(h.procName||h.procInit)} (${esc(h.procInit)}). Locked: use Rename codes.</p>`:staffChips('proc',h)}</div>
+    <div class="field wide"><span class="flab">Scribe</span>${staffChips('scribe',h)}</div>
+  </div></div>
+  <div class="panel"><span class="lbl">Where</span><div class="form">
+    ${chipField('bioregion','Bioregion','bioregion',h)}${chipField('zone','Zone','zone',h)}
+    ${F('location','Location','text',{list:'locList',cls:'half'})}<datalist id="locList">${locs.map(l=>`<option value="${esc(l)}">`).join('')}</datalist>
+    ${F('lat','Latitude (deg dec-min, S)','text',{ph:'32 15.432',im:'decimal'})}${F('lon','Longitude (deg dec-min, E)','text',{ph:'115 40.120',im:'decimal'})}${F('mapRef','Map ref / coord')}
+    <div class="field"><label for="h_depth">Depth</label><div class="inl"><input id="h_depth" data-h="depth" inputmode="decimal" value="${esc(h.depth)}" autocomplete="off">
+      <div class="chips" data-du><button class="btn" data-u="m" aria-pressed="${h.depthUnit!=='f'}">m</button><button class="btn" data-u="f" aria-pressed="${h.depthUnit==='f'}">fathoms</button></div></div>
+      <span class="small muted" id="depthM">${depthNote(h)}</span></div>
+    <div class="field"><span class="flab">Position check</span><span class="small muted" id="posNote">${posNote(h)}</span></div>
+  </div></div>
+  <div class="panel"><span class="lbl">Source</span><div class="form">
+    ${chipField('collPoint','Collection point','collPoint',h)}${chipField('method','Method','method',h)}
+    ${chipField('collector','Collector','collector',h)}${chipField('sector','Sector','sector',h)}${chipField('bait','Bait / lure','bait',h)}
+    ${F('fisherId','Fisher PeopleID','text',{im:'numeric'})}${F('fisherName','Fisher name (for this sheet only)','text',{cls:'half'})}
+  </div><p class="note">Fisher contact details stay in the Access Fishers table. Enter the PeopleID; picking from the Fishers list arrives once that table is loaded.</p></div>
+  <div class="panel"><span class="lbl">Other</span><div class="form">
+    ${F('temp','Temperature (°C)','text',{im:'decimal'})}${F('sal','Salinity','text',{im:'decimal'})}
+    ${F('nsSp','No. samples: species')}${F('nsN','No. samples: number','text',{im:'numeric'})}
+    <div class="field wide"><label for="h_multiBlock">Multi.Block</label><textarea id="h_multiBlock" data-h="multiBlock">${esc(h.multiBlock)}</textarea></div>
+    <div class="field wide"><label for="h_comments">Comments</label><textarea id="h_comments" data-h="comments">${esc(h.comments)}</textarea></div>
+  </div></div>
+  <div class="actions"><button class="btn primary" id="toEntry">Go to fish entry</button></div>`;
+  el.querySelectorAll('[data-h]').forEach(inp=>inp.addEventListener('input',()=>{h[inp.dataset.h]=inp.value;
+    if(inp.dataset.h==='capDate'){h.project=h.project||fyOf(inp.value)}
+    if(inp.dataset.h==='depth')$('#depthM').textContent=depthNote(h);
+    if(inp.dataset.h==='lat'||inp.dataset.h==='lon')$('#posNote').textContent=posNote(h);
+    save();renderTop()}));
+  el.querySelectorAll('[data-h="capDate"]').forEach(i=>i.addEventListener('change',()=>viewHeader()));
+  el.querySelectorAll('[data-chip]').forEach(g=>g.onclick=e=>{const bt=e.target.closest('[data-v]');if(!bt)return;const k=g.dataset.chip,inp=g.querySelector('[data-otherfor]');
+    if(bt.dataset.v==='__other'){inp.hidden=false;inp.focus();g.querySelectorAll('[data-v]').forEach(x=>x.setAttribute('aria-pressed',x===bt));return}
+    h[k]=h[k]===bt.dataset.v?'':bt.dataset.v;inp.hidden=true;inp.value='';save();viewHeaderKeep()});
+  el.querySelectorAll('[data-otherfor]').forEach(inp=>{inp.addEventListener('input',()=>{h[inp.dataset.otherfor]=inp.value.trim();save();renderTop()});
+    inp.addEventListener('change',()=>{const v=inp.value.trim(),g=inp.closest('[data-chip]'),l=g.dataset.list;if(v&&!LISTS[l].includes(v)){S.extra[l]=S.extra[l]||[];if(!S.extra[l].includes(v))S.extra[l].push(v);save()}})});
+  el.querySelectorAll('[data-staff]').forEach(g=>g.onclick=e=>{const bt=e.target.closest('[data-init]');if(!bt)return;const p=S.staff.find(x=>x.init===bt.dataset.init);
+    if(g.dataset.staff==='proc'){if(lock)return;h.procInit=h.procInit===p.init?'':p.init;h.procName=h.procInit?p.name:''}else h.scribe=h.scribe===p.init?'':p.init;
+    save();viewHeaderKeep()});
+  const du=el.querySelector('[data-du]');du.onclick=e=>{const bt=e.target.closest('[data-u]');if(!bt)return;h.depthUnit=bt.dataset.u;save();viewHeaderKeep()};
+  const rb=$('#renB');if(rb)rb.onclick=()=>renameDialog(b);
+  $('#toEntry').onclick=()=>show('entry')}
+function viewHeaderKeep(){const y=$('#main').scrollTop;viewHeader();renderTop();$('#main').scrollTop=y}
+function depthM(h){const v=parseFloat(h.depth);if(!isFinite(v))return '';return h.depthUnit==='f'?String(Math.round(v*FATHOM*10)/10):String(v)}
+function depthNote(h){const m=depthM(h);return m===''?'Stored in metres':h.depthUnit==='f'?`= ${m} m (stored in metres)`:'Stored in metres'}
+/* Coordinates: accepts "32 15.432", "32°15.432'", "-32.2572" or "32 15 25.9". Latitude assumed south, longitude east. */
+function parseCoord(v,isLat){v=String(v||'').trim();if(!v)return null;const neg=/^-|[SW]\s*$/i.test(v)||isLat;
+  const n=v.replace(/[^\d.\s]/g,' ').trim().split(/\s+/).map(Number);if(!n.length||n.some(x=>!isFinite(x)))return NaN;
+  let d=n[0]+(n[1]||0)/60+(n[2]||0)/3600;if(n.length===1)d=n[0];if((n[1]||0)>=60||(n[2]||0)>=60)return NaN;
+  if(isLat&&(d<9||d>45))return NaN;if(!isLat&&(d<100||d>130))return NaN;return Math.round((isLat?-d:d)*1e6)/1e6}
+function posNote(h){const a=parseCoord(h.lat,true),o=parseCoord(h.lon,false);
+  if(a===null&&o===null)return 'No position entered (optional)';
+  if(Number.isNaN(a)||Number.isNaN(o))return 'Check the position: expected degrees and decimal minutes, e.g. 32 15.432';
+  return `${a===null?'—':a.toFixed(5)}, ${o===null?'—':o.toFixed(5)} (decimal degrees)`}
+
+/* rename every code in a batch (after cross-referencing with the other iPad or paper) */
+function renameDialog(b){const fs=bFish(b.id);
+  modal(`<h3>Rename codes for this batch</h3>
+  <p class="note">Changes the processor initials, capture date, iPad letter or batch letter in all ${fs.length} codes in this batch. Fish numbers stay the same. Old codes are kept on record and never issued again. Relabel any envelopes or vials already written.</p>
+  <div class="form">
+    <div class="field"><label for="r_init">Processor initials</label><input id="r_init" value="${esc(b.h.procInit)}" autocomplete="off" style="text-transform:uppercase"></div>
+    <div class="field"><label for="r_date">Capture date</label><input id="r_date" type="date" value="${esc(b.h.capDate)}"></div>
+    <div class="field"><label for="r_dev">iPad letter</label><input id="r_dev" maxlength="1" value="${esc(b.dev||S.device)}" style="text-transform:uppercase"></div>
+    <div class="field"><label for="r_let">Batch letter</label><input id="r_let" maxlength="1" value="${esc(batchLetter(b))}" style="text-transform:uppercase"></div>
+  </div>
+  <div class="preview" id="r_prev"></div><div id="r_msg"></div>
+  <div class="actions"><button class="btn primary" id="r_go">Rename all</button><button class="btn" id="r_no">Cancel</button></div>`);
+  const calc=()=>{const init=$('#r_init').value.trim().toUpperCase(),date=$('#r_date').value,dev=$('#r_dev').value.trim().toUpperCase(),L=$('#r_let').value.trim().toUpperCase();
+    const err=!/^[A-Z]{1,4}$/.test(init)?'Initials: 1 to 4 letters':!yymmdd(date)?'Enter a capture date':!/^[A-Z]$/.test(dev)?'iPad letter: one letter A to Z':!/^[A-Z]$/.test(L)?'Batch letter: one letter A to Z':'';
+    const nm=init+yymmdd(date)+dev+L,om=mid(b)+batchLetter(b);
+    const pairs=fs.map(f=>{const i=f.code.lastIndexOf(om+'-');const nc=i>=0?f.code.slice(0,i)+nm+f.code.slice(i+om.length):f.code;return [f,nc]});
+    const own=new Set(fs.map(f=>f.code));
+    const clash=pairs.filter(([f,nc])=>nc!==f.code&&((S.issued[nc]&&S.issued[nc].b!==b.id)||(S.fish.some(x=>x.code===nc&&!own.has(x.code)))));
+    return {init,date,dev,L,err,pairs,clash,same:nm===om}};
+  const upd=()=>{const r=calc();$('#r_prev').textContent=r.pairs.slice(0,40).map(([f,nc])=>`${f.code}  →  ${nc}`).join('\n')+(r.pairs.length>40?`\n… ${r.pairs.length-40} more`:'');
+    $('#r_msg').innerHTML=r.err?`<p class="warn">${r.err}</p>`:r.clash.length?`<p class="warn">${r.clash.length} new code(s) already exist on this iPad, e.g. ${esc(r.clash[0][1])}. Choose another batch letter.</p>`:r.same?'<p class="note">No change.</p>':'';
+    $('#r_go').disabled=!!(r.err||r.clash.length||r.same)};
+  ['r_init','r_date','r_dev','r_let'].forEach(i=>$('#'+i).addEventListener('input',upd));upd();
+  $('#r_no').onclick=closeModal;
+  $('#r_go').onclick=()=>{const r=calc();if(r.err||r.clash.length||r.same)return;const now=new Date().toISOString();
+    r.pairs.forEach(([f,nc])=>{if(nc===f.code)return;if(S.issued[f.code])S.issued[f.code].st='renamed:'+nc;S.issued[nc]={b:b.id,f:f.id,t:now,st:'active'};
+      if(f.gvial===f.code)f.gvial=nc;f.code=nc;f.edited=now});
+    if(b.h.procInit!==r.init){b.h.procInit=r.init;const p=S.staff.find(x=>x.init===r.init);b.h.procName=p?p.name:b.h.procName}
+    b.h.capDate=r.date;b.dev=r.dev;b.letter=r.L;save();closeModal();toast(`Renamed ${r.pairs.length} codes`);show(view)}}
+
+/* ================= FISH ENTRY ================= */
+function viewEntry(){const el=$('#view');const b=activeB(),miss=codeMissing(b);
+  if(miss){el.className='page';el.innerHTML=`<div class="blocked"><h2>Fish entry</h2><p class="warn">${esc(miss)}.</p><div class="actions">${!b?'<button class="btn primary" data-go="batches">Batches</button>':!(b.dev||S.device)?'<button class="btn primary" data-go="setup">Setup</button>':'<button class="btn primary" data-go="header">Header</button>'}</div></div>`;
+    el.querySelectorAll('[data-go]').forEach(x=>x.onclick=()=>show(x.dataset.go));return}
+  el.className='entry';
+  el.innerHTML=`<div class="panel col-sp" id="pSp"></div><div class="panel col-pad" id="pPad"></div><div class="panel col-attr" id="pAttr"></div><div class="panel recent" id="pRec"></div>`;
+  renderEntry();
+  el.onclick=entryClick;el.oninput=entryInput}
+function renderEntry(){renderSp();renderPad();renderAttr();renderRecent();renderTop()}
+function curCode(){const b=activeB(),c=S.cur,sp=c.sp&&spBy(c.sp);if(!sp)return '';
+  if(c.editId){const f=S.fish.find(x=>x.id===c.editId);if(f&&f.sp===c.sp)return f.code}return nextCode(b,sp.acr)}
+function renderSp(){const b=activeB(),c=S.cur,fs=bFish(b.id),cnt={};fs.forEach(f=>cnt[f.sp]=(cnt[f.sp]||0)+1);
+  const quick=[...new Set([...Object.keys(cnt),...(c.sp?[c.sp]:[]),...[...spAll().values()].filter(s=>s.fav).map(s=>s.sci)])].slice(0,16).map(spBy).filter(Boolean);
+  const code=curCode(),edit=!!c.editId;
+  $('#pSp').innerHTML=`<div class="codebox${edit?' edit':''}"><span class="lbl">${edit?'Editing fish':'Next code'}</span><b>${esc(code||'pick a species')}</b>${edit?'<span class="small">Changes save over this fish</span>':''}</div>
+  <span class="lbl">Species</span><div class="spgrid">${quick.map(s=>spBtn(s,cnt[s.sci],c.sp===s.sci)).join('')}</div>
+  <input class="search" id="spQ" placeholder="Search name, scientific name or acronym" value="${esc(spQ)}" autocomplete="off" aria-label="Search species">
+  <div class="splist" id="spList">${spResults()}</div>`}
+function spBtn(s,n,on){return `<button class="btn sp" data-sp="${esc(s.sci)}" aria-pressed="${!!on}"><span class="n">${esc(s.common)}</span><span class="s">${esc(s.sci)}</span><span class="a">${esc(s.acr)}${s.code?' · '+esc(s.code):''}</span>${n?`<span class="cnt">${n}</span>`:''}</button>`}
+function spResults(){const q=spQ.trim().toLowerCase();if(!q)return '';
+  const r=[...spAll().values()].filter(s=>s.common.toLowerCase().includes(q)||s.sci.toLowerCase().includes(q)||s.acr.toLowerCase()===q).slice(0,30);
+  return r.map(s=>spBtn(s,0,S.cur.sp===s.sci)).join('')||'<p class="note">No match. Add the species in Setup.</p>'}
+function tileHTML(k){const c=S.cur,t=TILES[k],sp=c.sp&&spBy(c.sp),dis=k==='fl'&&sp&&!sp.fl,v=c[k];
+  return `<button class="tile${c.focus===k?' on':''}${v!==''?' has':''}" data-tile="${k}"${dis?' disabled':''}><span class="tl"><span>${t.l}</span><span>${dis?'n/a':t.u}</span></span><span class="tv${v===''?' empty':''}">${v===''?'—':esc(v)}</span></button>`}
+function renderPad(){const c=S.cur,t=TILES[c.focus]||TILES.tl;
+  $('#pPad').innerHTML=`<div class="tiles">${MAIN_TILES.map(tileHTML).join('')}</div>
+  <div class="keypad">${['1','2','3','4','5','6','7','8','9','.','0','DEL'].map(k=>`<button class="btn${k==='DEL'?' fn':''}" data-k="${k}"${k==='.'&&!t.dp?' disabled':''}>${k==='DEL'?'⌫ Back':k}</button>`).join('')}
+    <button class="btn fn" data-k="CLR">Clear</button><button class="btn next" data-k="NEXT">Next ▶</button></div>
+  <button class="btn" data-act="more" aria-expanded="${c.more}">${c.more?'Hide extra fields ▴':'Extra fields (jaw, eye, block, depth, time, tag…) ▾'}</button>
+  ${c.more?`<div class="tiles small">${MORE_TILES.map(tileHTML).join('')}</div>
+   <div class="field"><label for="e_time">Time</label><div class="inl"><input class="txt" id="e_time" data-e="time" type="time" value="${esc(c.time)}"><button class="btn mini" data-act="now">Now</button></div></div>
+   <div class="row2"><div class="field"><label for="e_tag">Tag no</label><input class="txt" id="e_tag" data-e="tag" value="${esc(c.tag)}" autocomplete="off"></div>
+   <div class="field"><label for="e_os">Oto slide</label><input class="txt" id="e_os" data-e="otoslide" value="${esc(c.otoslide)}" autocomplete="off"></div></div>
+   <button class="btn tog" data-tog="tlcalc" aria-pressed="${c.tlcalc}">TL calculated<small>${c.tlcalc?'yes':'no'}</small></button>`:''}`}
+function renderAttr(){const c=S.cur,sp=c.sp&&spBy(c.sp),ns=sp?Math.min(7,sp.stages||7):7,edit=!!c.editId;
+  const segG=k=>{const g=GEN[k],v=c[k],oth=v==='other';return `<div class="group"><span class="lbl">${g.l}</span><div class="seg c${g.o.length+1}" data-g="${k}">${g.o.map(([o,l])=>`<button class="btn chip" data-v="${o}" aria-pressed="${v===o}">${o}<small>${l}</small></button>`).join('')}<button class="btn chip" data-v="other" aria-pressed="${oth}">Other<small>add note</small></button></div></div>`};
+  const needNote=c.gen&&['storage','gmethod','tissue'].some(k=>c[k]==='other');
+  const w=c.warn||[];
+  $('#pAttr').innerHTML=`<div class="group"><span class="lbl">Sex</span><div class="seg c4" data-f="sex">${SEX.map(([v,l])=>`<button class="btn" data-sex="${v}" data-v="${v}" aria-pressed="${c.sex===v}">${l}</button>`).join('')}</div></div>
+  <div class="group"><span class="lbl">Macro stage${sp?` (1 to ${ns} for ${esc(sp.common)})`:''}</span><div class="seg c7 stg">${[1,2,3,4,5,6,7].map(n=>`<button class="btn" data-stage="${n}" aria-pressed="${String(c.stage)===String(n)}"${n>ns?' disabled':''}>${n}</button>`).join('')}</div></div>
+  <div class="seg c3"><button class="btn tog" data-tog="oto" aria-pressed="${c.oto}">Otoliths<small>${c.oto?'taken':'not taken'}</small></button><button class="btn tog" data-tog="his" aria-pressed="${c.his}">Gonads (His)<small>${c.his?'taken':'not taken'}</small></button><button class="btn tog" data-tog="gen" aria-pressed="${c.gen}">Genetics<small>${c.gen?'taken':'not taken'}</small></button></div>
+  ${c.gen?`<div class="genbox"><span class="small">Vial ID = the fish code (<b>${esc(curCode())}</b>)</span>${segG('storage')}${segG('gmethod')}${segG('tissue')}
+    ${needNote?`<input class="txt" id="e_gnote" data-e="gnote" placeholder="Note for 'Other' (required)" value="${esc(c.gnote)}" autocomplete="off">`:''}</div>`:''}
+  <input class="txt" id="e_cmt" data-e="cmt" placeholder="Comment for this fish" value="${esc(c.cmt)}" autocomplete="off" aria-label="Comment">
+  ${w.length?`<div class="warn" role="alert">Check before saving:<ul>${w.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div>`:''}
+  <button class="btn save${w.length&&c.ack?' confirm':edit?' edit':''}" data-act="save">${w.length&&c.ack?'Save anyway':edit?'Update fish':'Save fish'}<small>${esc(curCode())}</small></button>
+  ${edit?'<button class="btn" data-act="cancel">Cancel edit</button>':''}`}
+function rowSum(f){return [f.tl&&`TL ${f.tl}`,f.fl&&`FL ${f.fl}`,f.wt&&`${f.wt} g`].filter(Boolean).join(' · ')}
+function flags(f){return (f.oto?'<span class="tag o">Oto</span>':'')+(f.his?'<span class="tag h">His</span>':'')+(f.gen?'<span class="tag g">Gen</span>':'')}
+function renderRecent(){const b=activeB(),fs=bFish(b.id).slice(-8).reverse(),last=bFish(b.id).slice(-1)[0];
+  $('#pRec').innerHTML=`<div class="actions" style="justify-content:space-between"><span class="lbl">Last fish in this batch (${bFish(b.id).length} total) · tap to edit</span><button class="btn mini" data-act="sheet">Full batch sheet</button></div>
+  ${last?`<div class="lastfish" id="lastFish">Saved <b>${esc(last.code)}</b> ${esc(spName(last.sp))} ${esc(rowSum(last))}</div>`:''}
+  <div class="tblwrap"><table><thead><tr><th>Code</th><th>Species</th><th>TL</th><th>FL</th><th>Wt g</th><th>Sex</th><th>Stg</th><th>Gonad g</th><th>Samples</th><th>Comment</th></tr></thead>
+  <tbody>${fs.map(f=>`<tr data-id="${f.id}"${S.cur.editId===f.id?' class="sel"':''}><td class="mono">${esc(f.code)}</td><td>${esc(spName(f.sp))}</td><td class="num">${esc(f.tl)}</td><td class="num">${esc(f.fl)}</td><td class="num">${esc(f.wt)}</td><td>${esc(f.sex)}</td><td>${esc(f.stage)}</td><td class="num">${esc(f.gwt)}</td><td>${flags(f)}</td><td>${esc(f.cmt)}</td></tr>`).join('')||'<tr class="empty"><td colspan="10">No fish yet.</td></tr>'}</tbody></table></div>`}
+
+function touch(){const c=S.cur;c.ack=false;c.warn=[]}
+function nextTile(k){const sp=S.cur.sp&&spBy(S.cur.sp),order=S.cur.more&&MORE_TILES.includes(k)?MORE_TILES:MAIN_TILES;let i=order.indexOf(k);
+  for(let j=1;j<=order.length;j++){const n=order[(i+j)%order.length];if(n==='fl'&&sp&&!sp.fl)continue;return n}return k}
+function key(k){const c=S.cur,f=c.focus,t=TILES[f];let v=c[f]||'';
+  if(k==='NEXT'){c.focus=nextTile(f);renderPad();return}
+  if(k==='CLR')v='';else if(k==='DEL')v=v.slice(0,-1);
+  else if(k==='.'){if(!t.dp||v.includes('.'))return;v=(v||'0')+'.'}
+  else{const [a,d]=v.split('.');if(d!=null){if(d.length>=t.dp)return}else if((a||'').length>=t.max)return;v=(v+k).replace(/^0+(?=\d)/,'')}
+  c[f]=v;touch();renderPad();renderAttr()}
+function entryClick(e){const c=S.cur,t=e.target;
+  const sp=t.closest('[data-sp]');if(sp){if(c.sp!==sp.dataset.sp){c.sp=sp.dataset.sp;const s=spBy(c.sp);if(s&&!s.fl){c.fl='';if(c.focus==='fl')c.focus='wt'}if(s&&+c.stage>s.stages)c.stage=''}spQ='';touch();renderSp();renderPad();renderAttr();return}
+  const tl=t.closest('[data-tile]');if(tl){c.focus=tl.dataset.tile;renderPad();return}
+  const k=t.closest('[data-k]');if(k){key(k.dataset.k);return}
+  const sx=t.closest('[data-sex]');if(sx){c.sex=c.sex===sx.dataset.sex?'':sx.dataset.sex;touch();renderAttr();return}
+  const st=t.closest('[data-stage]');if(st){c.stage=String(c.stage)===st.dataset.stage?'':st.dataset.stage;touch();renderAttr();return}
+  const tg=t.closest('[data-tog]');if(tg){const k2=tg.dataset.tog;c[k2]=!c[k2];touch();if(k2==='tlcalc')renderPad();else renderAttr();return}
+  const g=t.closest('[data-g] [data-v]');if(g){const k2=g.closest('[data-g]').dataset.g;c[k2]=c[k2]===g.dataset.v?'':g.dataset.v;touch();renderAttr();return}
+  const tr=t.closest('tr[data-id]');if(tr){startEdit(tr.dataset.id);return}
+  const a=t.closest('[data-act]');if(!a)return;const act=a.dataset.act;
+  if(act==='more'){c.more=!c.more;if(!c.more&&MORE_TILES.includes(c.focus))c.focus='tl';renderPad();return}
+  if(act==='now'){c.time=hm(new Date().toISOString());renderPad();return}
+  if(act==='save'){commit();return}
+  if(act==='cancel'){S.cur=blankCur(c);renderEntry();return}
+  if(act==='sheet'){show('sheet');return}}
+function entryInput(e){const t=e.target;
+  if(t.id==='spQ'){spQ=t.value;$('#spList').innerHTML=spResults();return}
+  if(t.dataset.e){S.cur[t.dataset.e]=t.value;if(S.cur.warn.length){S.cur.ack=false}}}
+
+/* checks: soft warnings; a second tap on Save saves anyway */
+function lwFit(sci,lk,exclude){const pts=S.fish.filter(f=>f.sp===sci&&f.id!==exclude&&+f[lk]>0&&+f.wt>0).map(f=>[Math.log(+f[lk]),Math.log(+f.wt)]);
+  if(pts.length<10)return null;const n=pts.length,mx=pts.reduce((s,p)=>s+p[0],0)/n,my=pts.reduce((s,p)=>s+p[1],0)/n;
+  let sxx=0,sxy=0;pts.forEach(([x,y])=>{sxx+=(x-mx)**2;sxy+=(x-mx)*(y-my)});if(!sxx)return null;const b=sxy/sxx,a=my-b*mx;
+  const sd=Math.sqrt(pts.reduce((s,[x,y])=>s+(y-a-b*x)**2,0)/Math.max(1,n-2));return {a,b,sd,n}}
+function checks(c,sp){const w=[],N=k=>c[k]===''?null:+c[k];const tl=N('tl'),fl=N('fl'),wt=N('wt'),gwt=N('gwt');
+  [['TL',tl],['FL',fl]].forEach(([l,v])=>{if(v!=null&&(v<30||v>2500))w.push(`${l} ${v} mm is outside 30 to 2500 mm`)});
+  if(tl!=null&&fl!=null&&fl>tl)w.push(`FL (${fl}) is longer than TL (${tl})`);
+  if(wt!=null&&gwt!=null&&gwt>=wt)w.push(`Gonad weight (${gwt} g) is not less than total weight (${wt} g)`);
+  if(c.stage&&!['M','F','T'].includes(c.sex))w.push('Stage entered but sex is not Male, Female or Transitional');
+  if(gwt!=null&&!c.sex)w.push('Gonad weight entered with no sex');
+  if(tl==null&&fl==null&&!c.jaw)w.push('No length recorded (TL, FL or jaw)');
+  if(c.gen&&(!c.storage||!c.gmethod||!c.tissue))w.push('Genetics: storage, method and tissue not all set');
+  if(c.gen&&['storage','gmethod','tissue'].some(k=>c[k]==='other')&&!c.gnote.trim())w.push("Genetics 'Other' chosen without a note");
+  if(wt!=null&&wt>0){const lk=tl!=null?'tl':fl!=null?'fl':null;
+    if(lk){const L=+c[lk],fit=lwFit(c.sp,lk,c.editId);if(fit){const pred=fit.a+fit.b*Math.log(L),r=Math.log(wt)-pred,lim=Math.max(3*fit.sd,0.25);
+      if(Math.abs(r)>lim)w.push(`Weight ${wt} g is unusual for a ${L} mm ${lk.toUpperCase()} ${sp.common} (about ${Math.round(Math.exp(pred))} g expected from ${fit.n} fish on this iPad)`)}}}
+  return w}
+const FIELDS=['tl','fl','wt','gwt','sex','stage','oto','his','gen','storage','gmethod','tissue','gnote','time','block','depth','jaw','eye','tlcalc','otoslide','tag','cmt'];
+function commit(){const b=activeB(),c=S.cur,miss=codeMissing(b);if(miss){toast(miss);return}
+  if(!c.sp){c.warn=['Pick a species first'];c.ack=false;renderAttr();return}
+  const sp=spBy(c.sp),old=c.editId?S.fish.find(f=>f.id===c.editId):null;
+  const w=checks(c,sp);let newCode=null;
+  if(old&&old.sp!==c.sp){newCode=nextCode(b,sp.acr);w.push(`Species changed, so the code changes from ${old.code} to ${newCode}. Relabel the envelope/vial`)}
+  if(w.length&&!c.ack){c.warn=w;c.ack=true;renderAttr();return}
+  const now=new Date();
+  if(!b.letter){b.letter=freeLetter(b);b.dev=b.dev||S.device}
+  if(old){FIELDS.forEach(k=>old[k]=c[k]);
+    if(newCode){S.issued[old.code]&&(S.issued[old.code].st='replaced:'+newCode);S.issued[newCode]={b:b.id,f:old.id,t:now.toISOString(),st:'active'};old.code=newCode}
+    old.sp=c.sp;old.acr=sp.acr;old.spcode=sp.code;old.gvial=old.gen?old.code:'';old.edited=now.toISOString();
+    save();toast(`Updated ${old.code}`);S.cur=blankCur(c);S.cur.sp=old.sp;renderEntry();return}
+  const code=nextCode(b,sp.acr),f={id:uid(),batch:b.id,dev:b.dev,seq:bFish(b.id).length+1,code,sp:c.sp,acr:sp.acr,spcode:sp.code,ts:now.toISOString(),tsl:localDT(now),edited:''};
+  FIELDS.forEach(k=>f[k]=c[k]);f.gvial=f.gen?code:'';
+  S.fish.push(f);S.issued[code]={b:b.id,f:f.id,t:f.ts,st:'active'};b.done=false;save();
+  S.cur=blankCur(c);S.cur.focus='tl';renderEntry();
+  const lf=$('#lastFish');if(lf){lf.classList.remove('flash');void lf.offsetWidth;lf.classList.add('flash')}
+  toast(`Saved ${code}`)}
+function startEdit(id){const f=S.fish.find(x=>x.id===id);if(!f)return;if(S.active!==f.batch)activate(f.batch);
+  const c=blankCur({more:S.cur.more});FIELDS.forEach(k=>c[k]=f[k]==null?c[k]:f[k]);c.sp=f.sp;c.editId=f.id;
+  if(MORE_TILES.some(k=>f[k])||f.time||f.tag||f.otoslide||f.tlcalc)c.more=true;S.cur=c;
+  if(view!=='entry')show('entry');else renderEntry();toast(`Editing ${f.code}`)}
+
+/* ================= BATCH SHEET ================= */
+function viewSheet(){const el=$('#view');el.className='page';const b=activeB();
+  if(!b){el.innerHTML=`<h2>Batch sheet</h2><p class="note">No batch is open.</p>`;return}
+  const fs=bFish(b.id),t={};fs.forEach(f=>{const n=spName(f.sp);t[n]=(t[n]||0)+1});
+  el.innerHTML=`<h2>Batch sheet · ${esc(b.h.location||'No location')} · ${esc(dmy(b.h.capDate))}</h2>
+  <div class="tally">${Object.entries(t).map(([k,v])=>`<span>${esc(k)} <b>${v}</b></span>`).join('')||'<span>No fish yet</span>'}</div>
+  <div class="actions"><button class="btn primary" id="toE">Fish entry</button><button class="btn" id="renB"${fs.length?'':' disabled'}>Rename codes…</button><button class="btn" id="toH">Header</button></div>
+  <p class="note">Same columns as the Access form. Tap a fish to edit it. <b>Delete</b> asks you to confirm; the deleted fish's code is never issued again.</p>
+  <div class="panel"><div class="tblwrap"><table><thead><tr><th>Code</th><th>Species</th><th>TL</th><th>FL</th><th>TOTWT</th><th>Sex</th><th>Stg</th><th>Gonad wt</th><th>Oto</th><th>His</th><th>Genetics</th><th>Jaw</th><th>Eye</th><th>Time</th><th>Block</th><th>Depth</th><th>Tag</th><th>Comment</th><th></th></tr></thead>
+  <tbody id="shBody">${fs.map(f=>`<tr data-id="${f.id}"><td class="mono">${esc(f.code)}</td><td>${esc(spName(f.sp))}</td><td class="num">${esc(f.tl)}</td><td class="num">${esc(f.fl)}</td><td class="num">${esc(f.wt)}</td><td>${esc(f.sex)}</td><td>${esc(f.stage)}</td><td class="num">${esc(f.gwt)}</td><td>${f.oto?'✓':''}</td><td>${f.his?'✓':''}</td><td>${f.gen?esc([f.storage,f.gmethod,f.tissue].join(' / ')):''}</td><td class="num">${esc(f.jaw)}</td><td class="num">${esc(f.eye)}</td><td>${esc(f.time)}</td><td>${esc(f.block)}</td><td>${esc(f.depth)}</td><td>${esc(f.tag)}</td><td>${esc(f.cmt)}</td><td><div class="delcell"><button class="btn mini danger" data-del="${f.id}">Delete</button></div></td></tr>`).join('')||'<tr class="empty"><td colspan="19">No fish yet.</td></tr>'}</tbody></table></div></div>`;
+  $('#toE').onclick=()=>show('entry');$('#toH').onclick=()=>show('header');$('#renB').onclick=()=>renameDialog(b);
+  const body=$('#shBody');let timer=null,askAt=0;
+  const restore=()=>{clearTimeout(timer);body.querySelectorAll('tr.confirmrow').forEach(x=>x.remove());body.querySelectorAll('[data-no]').forEach(x=>{x.outerHTML=`<button class="btn mini danger" data-del="${x.dataset.no}">Delete</button>`})};
+  body.onclick=e=>{const del=e.target.closest('[data-del]');
+    if(del){restore();const f=S.fish.find(x=>x.id===del.dataset.del);if(!f)return;
+      del.outerHTML=`<button class="btn mini" data-no="${f.id}">Cancel</button>`;askAt=Date.now();
+      const tr=body.querySelector(`tr[data-id="${f.id}"]`),cr=document.createElement('tr');cr.className='confirmrow';
+      cr.innerHTML=`<td colspan="19"><div class="confirmbar"><span class="delq">Delete ${esc(f.code)} ${esc(spName(f.sp))}${f.tl?' TL '+esc(f.tl)+' mm':''}? This cannot be undone.</span><button class="btn mini danger solid" data-yes="${f.id}">Yes, delete</button></div></td>`;
+      tr.after(cr);timer=setTimeout(restore,10000);return}
+    const yes=e.target.closest('[data-yes]');
+    if(yes){if(Date.now()-askAt<700)return;clearTimeout(timer);const f=S.fish.find(x=>x.id===yes.dataset.yes);
+      if(f){S.fish=S.fish.filter(x=>x.id!==f.id);if(S.issued[f.code])S.issued[f.code].st='deleted';if(S.cur.editId===f.id)S.cur=blankCur(S.cur);save();toast(`Deleted ${f.code}. That code will not be reused`);viewSheet()}return}
+    if(e.target.closest('[data-no]')){restore();return}
+    if(e.target.closest('.delcell')||e.target.closest('.confirmrow'))return;
+    const tr=e.target.closest('tr[data-id]');if(tr)startEdit(tr.dataset.id)}}
+
+/* ================= EXPORT ================= */
+const q=v=>{v=v==null?'':String(v);return /[",\n\r]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v};
+const TF=v=>v?'TRUE':'FALSE';
+function procStaff(h){const sc=S.staff.find(x=>x.init===h.scribe);return [h.procName||h.procInit,sc?sc.name:h.scribe].filter(Boolean).join(', ')}
+function latDD(h){const v=parseCoord(h.lat,true);return v==null||Number.isNaN(v)?'':v.toFixed(5)}
+function lonDD(h){const v=parseCoord(h.lon,false);return v==null||Number.isNaN(v)?'':v.toFixed(5)}
+/* Column names follow the Access form labels. Field names in the Access tables may differ: confirm with the data manager. */
+const BCOLS=[['Project',b=>b.h.project],['Date',b=>dmy(b.h.capDate)],['Bioregion',b=>b.h.bioregion],['Zone',b=>b.h.zone],['Location',b=>b.h.location],
+  ['Temperature',b=>b.h.temp],['Salinity',b=>b.h.sal],['Depth',b=>depthM(b.h)],['Latitude',b=>latDD(b.h)],['Longitude',b=>lonDD(b.h)],['Map coord',b=>b.h.mapRef],
+  ['Collection Point',b=>b.h.collPoint],['Method',b=>b.h.method],['Collector',b=>b.h.collector],['Sector',b=>b.h.sector],['Bait/Lure',b=>b.h.bait],
+  ['Date of Processing',b=>dmy(b.h.procDate)],['Processing Staff',b=>procStaff(b.h)],['Comments',b=>b.h.comments],['No. Samples species',b=>b.h.nsSp],['No. Samples',b=>b.h.nsN],
+  ['Multi.Block',b=>b.h.multiBlock],['PeopleID',b=>b.h.fisherId],['App_BatchID',b=>b.id]];
+function gText(f,k){return f.gen?(f[k]==='other'?'other':f[k]):''}
+function fishCmt(f){return [f.cmt,f.gen&&f.gnote?'Genetics: '+f.gnote:''].filter(Boolean).join('; ')}
+const FCOLS=[['Otolith Code',f=>f.code],['Species',f=>spBy(f.sp)?spBy(f.sp).code:f.spcode],['TL',f=>f.tl],['FL',f=>f.fl],['TOTWT',f=>f.wt],['SEX',f=>f.sex],['Macro STA',f=>f.stage],
+  ['GONADWT',f=>f.gwt],['Time',f=>f.time],['Block num',f=>f.block],['Depth',f=>f.depth],['GeneticsVial',f=>f.gvial],['Storage',f=>gText(f,'storage')],['Method',f=>gText(f,'gmethod')],
+  ['Tissue',f=>gText(f,'tissue')],['His',f=>TF(f.his)],['Oto',f=>TF(f.oto)],['Jaw len',f=>f.jaw],['Eye op',f=>f.eye],['TLcalculated',f=>TF(f.tlcalc)],['Oto slide',f=>f.otoslide],
+  ['tag num',f=>f.tag],['Comments',f=>fishCmt(f)],['App_BatchID',f=>f.batch]];
+const XCOLS=[['fish_id',f=>f.id],['device',f=>f.dev],['seq_in_batch',f=>f.seq],['species_common',f=>spName(f.sp)],['species_sci',f=>f.sp],['acronym',f=>f.acr],
+  ['timestamp_utc',f=>f.ts],['time_local',f=>f.tsl],['edited_utc',f=>f.edited]];
+const XB=[['batch_depth_entered',b=>b.h.depth],['batch_depth_unit',b=>b.h.depthUnit],['lat_entered',b=>b.h.lat],['lon_entered',b=>b.h.lon],['proc_initials',b=>b.h.procInit],['scribe_initials',b=>b.h.scribe],
+  ['fisher_name',b=>b.h.fisherName],['batch_code',b=>batchTag(b)],['batch_complete',b=>TF(b.done)]];
+function csv(kind,scope){const bs=scope==='all'?S.batches:S.batches.filter(b=>b.id===S.active);const ids=new Set(bs.map(b=>b.id));
+  const fs=S.fish.filter(f=>ids.has(f.batch)),bb=id=>S.batches.find(b=>b.id===id);
+  if(kind==='batch')return [BCOLS.map(c=>q(c[0])).join(','),...bs.map(b=>BCOLS.map(c=>q(c[1](b))).join(','))].join('\r\n');
+  if(kind==='fish')return [FCOLS.map(c=>q(c[0])).join(','),...fs.map(f=>FCOLS.map(c=>q(c[1](f))).join(','))].join('\r\n');
+  const bc=BCOLS.filter(c=>c[0]!=='App_BatchID'),fc=FCOLS.filter(c=>c[0]!=='App_BatchID'),bcName=n=>['Depth','Method','Comments'].includes(n)?'Batch '+n:n;
+  return [[...bc.map(c=>bcName(c[0])),...XB.map(c=>c[0]),...fc.map(c=>c[0]),...XCOLS.map(c=>c[0]),'batch_id'].map(q).join(','),
+    ...fs.map(f=>{const b=bb(f.batch);return [...bc.map(c=>c[1](b)),...XB.map(c=>c[1](b)),...fc.map(c=>c[1](f)),...XCOLS.map(c=>c[1](f)),f.batch].map(q).join(',')})].join('\r\n')}
+let exKind='fish',exScope='active';
+function viewExport(){const el=$('#view');el.className='page';const top=window.top===window.self;const txt=csv(exKind,exScope),dups=dupCodes();
+  el.innerHTML=`<h2>Export</h2>
+  ${dups.length?`<div class="dupe">Duplicate codes on this iPad: ${esc(dups.join(', '))}. Fix with Rename codes before importing.</div>`:''}
+  <div class="tabs">${[['batch','Access: batch (header) table'],['fish','Access: fish table'],['flat','Flat: one row per fish, everything']].map(([k,l])=>`<button class="btn" data-ex="${k}" aria-pressed="${exKind===k}">${l}</button>`).join('')}</div>
+  <div class="tabs">${[['active','This batch'],['all','All batches']].map(([k,l])=>`<button class="btn" data-sc="${k}" aria-pressed="${exScope===k}">${l}</button>`).join('')}</div>
+  <p class="note">The two Access tables use the Access form's column names and codes, with blanks for anything not collected, dates as DD/MM/YYYY, depth in metres, positions in decimal degrees and tick boxes as TRUE/FALSE. Both carry <b>App_BatchID</b> to link fish to their header (drop it if appending by hand). The flat file adds species names, device, timestamps and the values as typed, for R.</p>
+  <textarea class="csv" id="csvOut" readonly aria-label="CSV output">${esc(txt)}</textarea>
+  <div class="actions"><button class="btn primary" id="copyCsv">Copy CSV</button>${top?'<button class="btn" id="dlCsv">Save CSV file</button>':''}<button class="btn" id="fullBk">Full backup file</button></div>
+  ${top?'':'<p class="note">In this preview, use Copy. The installed app also saves the CSV to Files or shares it to Mail.</p>'}`;
+  el.querySelectorAll('[data-ex]').forEach(b=>b.onclick=()=>{exKind=b.dataset.ex;viewExport()});
+  el.querySelectorAll('[data-sc]').forEach(b=>b.onclick=()=>{exScope=b.dataset.sc;viewExport()});
+  $('#copyCsv').onclick=()=>{const ta=$('#csvOut');const p=navigator.clipboard&&navigator.clipboard.writeText?navigator.clipboard.writeText(ta.value):Promise.reject();
+    p.then(()=>toast('CSV copied')).catch(()=>{ta.focus();ta.select();toast('Selected. Use the system Copy')})};
+  if(top)$('#dlCsv').onclick=()=>{const b=activeB(),name=`lab_${exKind}_${exScope==='all'?'all':(b?batchTag(b)||'batch':'batch')}_${S.device||'X'}_${stampName()}.csv`;
+    shareFiles([new File(['﻿'+csv(exKind,exScope)],name,{type:'text/csv'})],name,'CSV saved')};
+  $('#fullBk').onclick=()=>fullBackup()}
+
+/* ================= SETUP ================= */
+let spFilter='';
+function viewSetup(){const el=$('#view');el.className='page';
+  el.innerHTML=`<h2>Setup</h2>
+  <div class="panel"><span class="lbl">This iPad</span>
+    <p class="note">Each iPad needs its own letter. It goes into every sample code, so two iPads can never issue the same code. Changing it only affects new batches.</p>
+    <div class="form"><div class="field"><label for="s_dev">iPad letter (A to Z)</label><input id="s_dev" maxlength="1" value="${esc(S.device)}" style="text-transform:uppercase;font-family:var(--f-mono);font-size:22px" autocomplete="off"></div>
+    <div class="field"><label for="s_dn">iPad name (optional)</label><input id="s_dn" value="${esc(S.devName)}" placeholder="e.g. Lab bench 1" autocomplete="off"></div></div>
+    <div class="actions"><button class="btn primary" id="s_save">Save</button></div></div>
+  <div class="panel"><span class="lbl">Staff</span>
+    <p class="note">Initials of the person processing go into the code (e.g. VM). Use the same initials every time.</p>
+    <div id="staffList" class="group">${S.staff.map((p,i)=>`<div class="staffrow"><span>${esc(p.name)}</span><span class="mono" style="font-family:var(--f-mono)">${esc(p.init)}</span><button class="btn mini danger" data-rmst="${i}">Remove</button></div>`).join('')||'<p class="note">No staff yet.</p>'}</div>
+    <div class="staffrow"><input class="txt" id="st_n" placeholder="Name, e.g. Vinnie Middleton" autocomplete="off"><input class="txt" id="st_i" placeholder="VM" maxlength="4" style="text-transform:uppercase" autocomplete="off"><button class="btn mini" id="st_add">Add</button></div></div>
+  <div class="panel"><span class="lbl">Species (${spAll().size})</span>
+    <p class="note">Acronyms, codes, FL and stage counts are placeholders until the DPIRD species table arrives. Acronyms must be unique; a change only affects new codes. ★ puts a species on the entry screen's quick list.</p>
+    <input class="search" id="spF" placeholder="Filter species" value="${esc(spFilter)}" autocomplete="off" aria-label="Filter species">
+    <div class="tblwrap" style="max-height:480px;overflow:auto"><table class="sptab"><thead><tr><th>★</th><th>Common</th><th>Scientific</th><th>Acronym</th><th>Access code</th><th>FL</th><th>Stages</th></tr></thead><tbody id="spBody"></tbody></table></div>
+    <div class="form"><div class="field"><label for="ns_c">Add species: common name</label><input id="ns_c" autocomplete="off"></div><div class="field"><label for="ns_s">Scientific name</label><input id="ns_s" autocomplete="off"></div>
+    <div class="field"><label for="ns_a">Acronym</label><input id="ns_a" maxlength="4" style="text-transform:uppercase" autocomplete="off"></div><div class="field"><span class="flab">&nbsp;</span><button class="btn" id="ns_add">Add species</button></div></div></div>
+  <div class="actions"><span class="note">Lab Logger version <b>${APP_VERSION}</b></span><button class="btn" id="chkUpd">Check for updates</button></div>
+  <div class="panel"><span class="lbl">Data on this iPad</span><p class="note" id="storeInfo">Checking storage…</p>
+    <div class="actions"><button class="btn primary" id="bkNow3">Full backup now</button><button class="btn danger" id="clrAll">Clear all data</button></div></div>
+  <div class="panel"><span class="lbl">Restore from a backup file</span>
+    <p class="note">Choose a <b>lablogger_backup_….json</b> file. You see what is in it before anything changes.</p>
+    <input type="file" id="rsFile" accept=".json,application/json" aria-label="Backup file"><div id="rsOut"></div></div>`;
+  renderSpTable();storeInfo();
+  $('#s_save').onclick=()=>{const d=$('#s_dev').value.trim().toUpperCase();if(d&&!/^[A-Z]$/.test(d)){toast('iPad letter must be one letter A to Z');return}
+    S.device=d;S.devName=$('#s_dn').value.trim();S.batches.forEach(b=>{if(!b.letter&&!bFish(b.id).length)b.dev=d});save();toast('Saved');renderTop()};
+  $('#st_add').onclick=()=>{const n=$('#st_n').value.trim(),i=$('#st_i').value.trim().toUpperCase();
+    if(!n||!/^[A-Z]{1,4}$/.test(i)){toast('Enter a name and 1 to 4 letter initials');return}if(S.staff.some(p=>p.init===i)){toast(i+' is already used');return}
+    S.staff.push({name:n,init:i});save();viewSetup()};
+  $('#staffList').onclick=e=>{const b=e.target.closest('[data-rmst]');if(!b)return;armed(b,'Tap again',()=>{S.staff.splice(+b.dataset.rmst,1);save();viewSetup()})};
+  $('#spF').addEventListener('input',e=>{spFilter=e.target.value;renderSpTable()});
+  $('#ns_add').onclick=()=>{const c=$('#ns_c').value.trim(),s=$('#ns_s').value.trim()||('custom: '+c),a=$('#ns_a').value.trim().toUpperCase();
+    if(!c||!/^[A-Z]{2,4}$/.test(a)){toast('Enter a common name and a 2 to 4 letter acronym');return}
+    if(spBy(s)){toast('That species is already listed');return}if([...spAll().values()].some(x=>x.acr===a)){toast('Acronym '+a+' is already used');return}
+    S.spCustom.push({acr:a,common:c,sci:s,code:'',fl:true,stages:7,fav:true});spReset();save();toast('Species added');viewSetup()};
+  $('#chkUpd').onclick=async()=>{if(!window.checkForUpdate){toast('Updates apply to the installed app, not this preview');return}
+    toast('Checking…');const r=await window.checkForUpdate();
+    toast({latest:`You have the latest version (${APP_VERSION})`,downloading:'New version downloading. A restart button will appear',ready:'Update ready. Tap the green button to restart',offline:'No internet. Try again later',none:'Open the app from the home-screen icon to get updates'}[r]||'Checked')};
+  $('#bkNow3').onclick=()=>fullBackup();
+  $('#clrAll').onclick=e=>armed(e.target,'Tap again to erase everything',()=>{const keep={device:S.device,devName:S.devName,staff:S.staff,spEdits:S.spEdits,spCustom:S.spCustom,extra:S.extra,ui:S.ui,issued:S.issued};
+    S=Object.assign(fresh(),keep);save();toast('All batches and fish cleared (issued codes are still remembered)');viewSetup();renderTop()});
+  $('#rsFile').onchange=e=>{const f=e.target.files&&e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>previewRestore(String(rd.result));rd.onerror=()=>toast('Could not read that file');rd.readAsText(f)}}
+function renderSpTable(){const qq=spFilter.trim().toLowerCase(),list=[...spAll().values()].filter(s=>!qq||s.common.toLowerCase().includes(qq)||s.sci.toLowerCase().includes(qq)||s.acr.toLowerCase().includes(qq));
+  const body=$('#spBody');body.innerHTML=list.map(s=>`<tr data-sci="${esc(s.sci)}"><td><button class="btn" data-fav aria-pressed="${!!s.fav}">★</button></td><td>${esc(s.common)}${s.grp==='shark'?' <span class="muted small">(shark/ray)</span>':''}</td><td><i>${esc(s.sci)}</i></td>
+    <td><input class="ac" data-f="acr" value="${esc(s.acr)}" maxlength="4" aria-label="Acronym"></td><td><input class="cd" data-f="code" value="${esc(s.code)}" inputmode="numeric" maxlength="8" aria-label="Access code"></td>
+    <td><button class="btn" data-fl aria-pressed="${!!s.fl}">${s.fl?'Yes':'No'}</button></td><td><select data-f="stages" aria-label="Stages">${[1,2,3,4,5,6,7].map(n=>`<option${n==s.stages?' selected':''}>${n}</option>`).join('')}</select></td></tr>`).join('');
+  const setE=(sci,o)=>{S.spEdits[sci]=Object.assign(S.spEdits[sci]||{},o);spReset();save()};
+  body.onclick=e=>{const tr=e.target.closest('tr[data-sci]');if(!tr)return;const s=spBy(tr.dataset.sci);
+    if(e.target.closest('[data-fav]')){setE(s.sci,{fav:!s.fav});renderSpTable()}
+    if(e.target.closest('[data-fl]')){setE(s.sci,{fl:!s.fl});renderSpTable()}};
+  body.onchange=e=>{const tr=e.target.closest('tr[data-sci]'),k=e.target.dataset.f;if(!tr||!k)return;const s=spBy(tr.dataset.sci);let v=e.target.value.trim();
+    if(k==='acr'){v=v.toUpperCase();if(!/^[A-Z]{2,4}$/.test(v)){toast('Acronym: 2 to 4 letters');e.target.value=s.acr;return}
+      if([...spAll().values()].some(x=>x.acr===v&&x.sci!==s.sci)){toast(v+' is already used');e.target.value=s.acr;return}}
+    if(k==='code'&&v&&!/^\d{6,8}$/.test(v)){toast('Code: 6 digits (CAAB without 37), or 8 with');e.target.value=s.code;return}
+    if(k==='stages')v=+v;setE(s.sci,{[k]:v});toast('Saved')}}
+async function storeInfo(){const el=$('#storeInfo');if(!el)return;let used='',pers='unknown';
+  try{if(navigator.storage&&navigator.storage.estimate){const e=await navigator.storage.estimate();used=`${(e.usage/1e6).toFixed(1)} MB used of about ${Math.round(e.quota/1e6)} MB`}}catch(e){}
+  try{if(navigator.storage&&navigator.storage.persisted)pers=(await navigator.storage.persisted())?'granted':'not granted (back up regularly)'}catch(e){}
+  el.innerHTML=`${S.fish.length} fish in ${S.batches.length} batch(es); ${Object.keys(S.issued).length} codes issued on this iPad. Main store: <b>${db?(dbOk===false?'last save failed':'OK'):'unavailable'}</b> · Second copy: <b>${lsOk?'OK':'full (main store still saving)'}</b> · Permanent storage: ${pers}${used?' · '+used:''}.`}
+function previewRestore(txt){const out=$('#rsOut');let b;
+  try{b=JSON.parse(txt)}catch(e){out.innerHTML='<p class="warn">That file is not a Lab Logger backup.</p>';return}
+  if(!b||b.app!=='lab-logger'||!b.state||!Array.isArray(b.state.fish)||!Array.isArray(b.state.batches)){out.innerHTML='<p class="warn">That file is not a Lab Logger backup.</p>';return}
+  const B=b.state,haveF=new Set(S.fish.map(f=>f.id)),haveB=new Set(S.batches.map(x=>x.id));
+  const nF=B.fish.filter(f=>!haveF.has(f.id)),nB=B.batches.filter(x=>!haveB.has(x.id));
+  const codesHere=new Set(S.fish.map(f=>f.code)),clash=nF.filter(f=>codesHere.has(f.code));
+  out.innerHTML=`<p class="note">Backup from iPad <b>${esc(b.device||'?')}</b>, saved ${esc((b.exportedAt||'').replace('T',' ').slice(0,16))} UTC: <b>${B.batches.length}</b> batches, <b>${B.fish.length}</b> fish. This iPad has ${S.batches.length} batches, ${S.fish.length} fish.</p>
+   ${clash.length?`<p class="warn">${clash.length} fish in the backup have codes already used here (e.g. ${esc(clash[0].code)}). They will be added but flagged as duplicates to rename.</p>`:''}
+   <div class="actions"><button class="btn primary" id="rsMerge">Add missing (${nB.length} batches, ${nF.length} fish)</button><button class="btn danger" id="rsReplace">Replace everything on this iPad</button></div>
+   <p class="note"><b>Add missing</b> keeps everything here and adds what is only in the backup. <b>Replace</b> makes this iPad an exact copy of the backup, including its iPad letter, so it carries on where the other iPad left off.</p>`;
+  $('#rsMerge').onclick=()=>{S.fish=S.fish.concat(nF).sort((x,y)=>String(x.ts).localeCompare(String(y.ts)));S.batches=S.batches.concat(nB);
+    Object.keys(B.issued||{}).forEach(c=>{if(!S.issued[c])S.issued[c]=B.issued[c]});
+    (B.staff||[]).forEach(p=>{if(!S.staff.some(x=>x.init===p.init))S.staff.push(p)});save();toast(`Added ${nB.length} batches and ${nF.length} fish`);show('batches')};
+  $('#rsReplace').onclick=e=>armed(e.target,'Tap again to replace all data',()=>{const ui=S.ui;S=fillDefaults(JSON.parse(JSON.stringify(B)));S.ui=ui;spReset();
+    if(!S.batches.find(x=>x.id===S.active))S.active=null;applyUi();save();toast(`Restored ${S.fish.length} fish`);show('batches')})}
+
+/* ---------- boot ---------- */
+document.addEventListener('pointerdown',function(){try{navigator.wakeLock&&navigator.wakeLock.request('screen').catch(()=>{})}catch(e){}},{once:true});
+(async()=>{
+  db=await openDB();
+  const a=db?await idbLoad():null,b=lsLoad();
+  if(a){a.fish.sort((x,y)=>String(x.ts).localeCompare(String(y.ts)));a.fish.forEach(r=>savedJson.set(r.id,JSON.stringify(r)))}
+  const pick=a&&b?((a.savedAt||'')>=(b.savedAt||'')?a:b):(a||b);
+  S=pick?fillDefaults(pick):fresh();
+  applyUi();save();show(S.active&&activeB()?'entry':'batches');
+})();
+})();
+</script>
+<script>
+/* Updates: a new version is fetched fresh from the website (never from the iPad's web cache),
+   then a "Restart to update" button appears. Tapping it reloads into the new version. */
+(function(){if(!('serviceWorker' in navigator))return;
+  function offer(){if(document.getElementById('updBar'))return;const b=document.createElement('button');b.id='updBar';
+    b.textContent='Update downloaded · tap to restart';b.style.cssText='position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:30;min-height:52px;padding:0 22px;border-radius:999px;border:0;font:600 16px system-ui,-apple-system,sans-serif;background:#3ab36a;color:#04200e;box-shadow:0 4px 18px rgba(0,0,0,.35)';
+    b.onclick=()=>{navigator.serviceWorker.getRegistration().then(r=>{if(r&&r.waiting){r.waiting.postMessage('skipWaiting');setTimeout(()=>location.reload(),400)}else location.reload()})};document.body.appendChild(b)}
+  /* never reload by itself (it could interrupt a fish being keyed); offer a restart instead */
+  navigator.serviceWorker.addEventListener('controllerchange',offer);
+  window.addEventListener('load',()=>{navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(r=>{
+    if(r.waiting&&navigator.serviceWorker.controller)offer();
+    r.addEventListener('updatefound',()=>{const w=r.installing;w&&w.addEventListener('statechange',()=>{if(w.state==='installed'&&navigator.serviceWorker.controller)offer()})});
+    document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')r.update().catch(()=>{})});
+  }).catch(()=>{})});
+  window.checkForUpdate=function(){return navigator.serviceWorker.getRegistration().then(r=>{if(!r)return 'none';if(r.waiting){offer();return 'ready'}
+    return r.update().then(()=>new Promise(res=>setTimeout(()=>res(r.installing||r.waiting?'downloading':'latest'),1500)))}).catch(()=>'offline')};
+})();
+try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist()}catch(e){}
+</script>
+</body>
+</html>
