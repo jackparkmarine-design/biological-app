@@ -2,7 +2,7 @@
 // the next time the app is opened with internet. Files are always fetched fresh from the
 // website (cache: 'reload'), never from the iPad's web cache. Cache names are unique to this app
 // so it can share a github.io address with Catch Logger without touching its files.
-const VERSION = 'lab-logger-v1';
+const VERSION = 'lab-logger-v2';
 const FILES = ['./', './index.html', './manifest.webmanifest', './icon-180.png', './icon-192.png', './icon-512.png'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(VERSION).then(c => c.addAll(FILES.map(u => new Request(u, {cache: 'reload'})))).then(() => self.skipWaiting()));
